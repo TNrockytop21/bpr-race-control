@@ -51,7 +51,6 @@ export const MSG = {
   INCIDENT_WINDOW: 'incident:window',
   INCIDENT_FLAGGED: 'incident:flagged',
   BLUE_FLAG_VIOLATION: 'blueFlag:violation',
-  CONTACT_DETECTED: 'contact:detected',
   PENALTY_SERVED: 'penalty:served',
   STEWARD_LIST: 'steward:list',
   INCIDENT_LOCKED: 'incident:locked',

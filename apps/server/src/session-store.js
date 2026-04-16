@@ -12,12 +12,7 @@ const BLUE_FLAG_PROXIMITY = 0.05;
 // Blue flag violation: held up for more than 8 seconds
 const BLUE_FLAG_VIOLATION_SECONDS = 8;
 
-// Contact detection: lat-G spike threshold (g-force) — must be a genuine impact
-const CONTACT_LAT_G_THRESHOLD = 2.5;
-// Two cars must be within 0.5% track distance to be "close enough" for contact
-const CONTACT_PROXIMITY = 0.005;
-// Cooldown per pair: don't re-detect the same pair within 30 seconds
-const CONTACT_COOLDOWN_SECONDS = 30;
+
 
 class SessionStore {
   constructor() {
@@ -32,8 +27,6 @@ class SessionStore {
     this._blueFlagPairs = new Map();
     // Cooldown: don't re-flag the same pair within 60 seconds
     this._blueFlagCooldowns = new Map();
-    // Contact detection cooldowns: key = "driverA::driverB" (sorted), value = expiry sessionTime
-    this._contactCooldowns = new Map();
     // Pending penalties awaiting serving: driverId -> { type, issuedAt }
     this._pendingPenalties = new Map();
   }
@@ -443,11 +436,6 @@ class SessionStore {
   }
 
   /**
-   * Detect probable contact between cars.
-   * Looks for two connected drivers that are both experiencing high lat-G
-   * and are within close proximity on track simultaneously.
-   */
-  /**
    * Register a penalty that requires pit-lane serving (drive-through or stop-go).
    */
   addPendingPenalty(driverId, penaltyType) {
@@ -512,59 +500,6 @@ class SessionStore {
     }
 
     return served;
-  }
-
-  checkContactDetection(sessionTime) {
-    const contacts = [];
-    const driversWithSpikes = [];
-
-    for (const [id, driver] of this.drivers) {
-      if (!driver.connected || !driver.lastFrame) continue;
-      const absLatG = Math.abs(driver.lastFrame.latG || 0);
-      if (absLatG >= CONTACT_LAT_G_THRESHOLD) {
-        driversWithSpikes.push({
-          id,
-          name: driver.name,
-          lapDist: driver.lastFrame.lapDist,
-          lap: driver.lastFrame.lap,
-          latG: driver.lastFrame.latG,
-          speed: driver.lastFrame.speed,
-        });
-      }
-    }
-
-    // Check pairs of spiking drivers for proximity
-    for (let i = 0; i < driversWithSpikes.length; i++) {
-      for (let j = i + 1; j < driversWithSpikes.length; j++) {
-        const a = driversWithSpikes[i];
-        const b = driversWithSpikes[j];
-
-        let dist = Math.abs(a.lapDist - b.lapDist);
-        if (dist > 0.5) dist = 1 - dist;
-
-        if (dist <= CONTACT_PROXIMITY) {
-          const pairKey = [a.id, b.id].sort().join('::');
-          const cooldownUntil = this._contactCooldowns.get(pairKey) || 0;
-
-          if (sessionTime > cooldownUntil) {
-            contacts.push({
-              driverAId: a.id,
-              driverAName: a.name,
-              driverBId: b.id,
-              driverBName: b.name,
-              sessionTime,
-              lap: a.lap,
-              lapDist: a.lapDist,
-              latGA: a.latG,
-              latGB: b.latG,
-            });
-            this._contactCooldowns.set(pairKey, sessionTime + CONTACT_COOLDOWN_SECONDS);
-          }
-        }
-      }
-    }
-
-    return contacts;
   }
 
   getRawFrames(driverId, startTime, endTime) {

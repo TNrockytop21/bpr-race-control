@@ -113,7 +113,6 @@ export function App() {
   const [reviewingIncident, setReviewingIncident] = useState(null);
   // Incident type filter: which types to show. Default hides 1x off-tracks.
   const [incidentFilter, setIncidentFilter] = useState({
-    contact: true,
     'off-track': false,
     'blue-flag': true,
     protest: true,
@@ -224,22 +223,6 @@ export function App() {
           createdAt: Date.now(),
           detectedBy: 'auto',
           incidentType: 'blue-flag',
-          lap: payload.lap,
-        };
-        setIncidents((prev) => [...prev, incident]);
-      }),
-
-      // Contact detection from the server
-      wsClient.on('contact:detected', (payload) => {
-        const incident = {
-          id: `ct-${payload.driverAId}-${payload.driverBId}-${payload.sessionTime}`,
-          sessionTime: payload.sessionTime,
-          involvedDrivers: [payload.driverAId, payload.driverBId],
-          notes: `Probable contact — ${payload.driverAName} + ${payload.driverBName}`,
-          status: 'open',
-          createdAt: Date.now(),
-          detectedBy: 'auto',
-          incidentType: 'contact',
           lap: payload.lap,
         };
         setIncidents((prev) => [...prev, incident]);

@@ -127,7 +127,6 @@ function formatSessionTime(t) {
 }
 
 const FILTER_OPTIONS = [
-  { key: 'contact',   label: 'Contact (2x+)', color: '#ef4444' },
   { key: 'off-track', label: 'Off-track (1x)', color: '#888' },
   { key: 'blue-flag', label: 'Blue flag',       color: '#60a5fa' },
   { key: 'protest',   label: 'Driver Report',   color: '#f59e0b' },

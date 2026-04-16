@@ -112,21 +112,6 @@ export function handleAgentConnection(ws, req) {
             );
           }
 
-          const contacts = store.checkContactDetection(payload.sessionTime);
-          for (const c of contacts) {
-            broadcastToViewers(MSG.CONTACT_DETECTED, c);
-            const cEvent = store.addEvent('contact_detected', {
-              driverA: c.driverAName,
-              driverB: c.driverBName,
-              sessionTime: c.sessionTime,
-            });
-            broadcastToViewers(MSG.EVENT, cEvent);
-            recorder.recordEvent({ type: 'contact', ...c });
-            console.log(
-              `[contact] ${c.driverAName} + ${c.driverBName} @ ${c.sessionTime?.toFixed(1)}s`
-            );
-          }
-
           // Penalty serving verification
           const servedPenalties = store.checkPenaltyServing();
           for (const s of servedPenalties) {

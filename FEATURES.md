@@ -39,13 +39,7 @@ Detailed description of every feature in the system, how it works from the user'
 - **Steward sees:** An incident appears in the feed tagged "CONTACT" (red border) or "1x" (gray border) with the delta and total count
 - **Example:** "CONTACT — D. Newman +2x incident (total: 6)"
 
-#### 3b. Contact Detection
-- **Trigger:** Two drivers both experience |latG| > 2.5g simultaneously while within 0.5% track distance of each other
-- **Steward sees:** An incident tagged "CONTACT" with both drivers listed
-- **Example:** "CONTACT — Probable contact — D. Newman + A. Riegel"
-- **Cooldown:** Same pair won't re-trigger for 30 seconds
-
-#### 3c. Blue Flag Violation
+#### 3b. Blue Flag Violation
 - **Trigger:** A lapping car (more laps completed) is within 5% track distance of a slower car for more than 8 continuous seconds
 - **Steward sees:** An incident tagged "BLUE FLAG" with both drivers and the duration
 - **Example:** "BLUE FLAG — Blue flag ignored for 12s — D. Newman blocking A. Riegel"
@@ -59,7 +53,6 @@ Detailed description of every feature in the system, how it works from the user'
 
 | Filter | Default | What it controls |
 |--------|---------|-----------------|
-| Contact (2x+) | ON | Collisions and car contact |
 | Off-track (1x) | OFF | Solo off-tracks (not a stewarding issue) |
 | Blue flag | ON | Blue flag violations |
 | Driver Report | ON | Protests filed by drivers |
@@ -67,7 +60,7 @@ Detailed description of every feature in the system, how it works from the user'
 
 **Why off-track is off by default:** 1x incidents are overwhelmingly off-tracks that don't require steward action. Showing them would flood the feed.
 
-**Visual:** Each incident has a colored left border matching its category (red = contact, gray = 1x, blue = blue flag, amber = protest, purple = manual). The filtered count shows "X hidden" when filters are active.
+**Visual:** Each incident has a colored left border matching its category (gray = 1x, blue = blue flag, amber = protest, purple = manual). The filtered count shows "X hidden" when filters are active.
 
 **Sort order:** Oldest at top, newest at bottom — chronological order for easy tracking.
 

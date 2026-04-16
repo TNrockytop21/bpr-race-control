@@ -70,7 +70,6 @@ const styles = {
 
 const EVENT_CONFIG = {
   incident_detected: { tag: 'INC', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
-  contact_detected: { tag: 'CONTACT', color: '#ef4444', bg: 'rgba(239,68,68,0.06)' },
   blue_flag_violation: { tag: 'BLUE', color: '#60a5fa', bg: 'rgba(96,165,250,0.06)' },
   penalty_issued: { tag: 'PENALTY', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' },
   penalty_served: { tag: 'SERVED', color: '#22c55e', bg: 'rgba(34,197,94,0.06)' },
@@ -92,8 +91,6 @@ function formatEventText(event) {
   switch (event.type) {
     case 'incident_detected':
       return `${d.driverName} +${d.delta}x (total: ${d.newCount})`;
-    case 'contact_detected':
-      return `${d.driverA} + ${d.driverB}`;
     case 'blue_flag_violation':
       return `${d.slowDriver} blocking ${d.fastDriver} (${d.duration}s)`;
     case 'penalty_issued':
@@ -148,7 +145,6 @@ export function IncidentFeed() {
   const penaltiesIssued = events.filter((e) => e.type === 'penalty_issued').length;
   const penaltiesServed = events.filter((e) => e.type === 'penalty_served').length;
   const pendingPenalties = penaltiesIssued - penaltiesServed;
-  const contacts = events.filter((e) => e.type === 'contact_detected').length;
   const incidents = events.filter((e) => e.type === 'incident_detected').length;
 
   return (
@@ -159,7 +155,7 @@ export function IncidentFeed() {
       </div>
 
       {/* Active status bar */}
-      {(underInvestigation > 0 || pendingPenalties > 0 || contacts > 0 || incidents > 0) && (
+      {(underInvestigation > 0 || pendingPenalties > 0 || incidents > 0) && (
         <div style={{
           display: 'flex',
           gap: '8px',
@@ -176,9 +172,6 @@ export function IncidentFeed() {
           )}
           {pendingPenalties > 0 && (
             <span style={{ color: '#ef4444' }}>{pendingPenalties} penalty pending</span>
-          )}
-          {contacts > 0 && (
-            <span style={{ color: '#ef4444' }}>{contacts} contact{contacts !== 1 ? 's' : ''}</span>
           )}
           {incidents > 0 && (
             <span style={{ color: '#888' }}>{incidents} inc</span>

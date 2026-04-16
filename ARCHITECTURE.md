@@ -130,7 +130,7 @@ Node.js + Express + ws. Single process on the droplet. Three websocket endpoints
 |------|---------|
 | `main.js` | HTTP server, websocket routing (`/ws/agent`, `/ws/viewer`, `/ws/steward`), health check, Stream Deck API. |
 | `ws-handler.js` | Connection handlers for agents, viewers, and stewards. Agent socket registry (`agentSockets` Map) for reverse messaging. Steward coordination (identity, incident locking). Auto-detection broadcasting. |
-| `session-store.js` | `SessionStore` class — single shared driver pool. Lap finalization, distance trace compression, raw-frame ring buffer (10 min), blue flag detection, contact detection, penalty serving verification. |
+| `session-store.js` | `SessionStore` class — single shared driver pool. Lap finalization, distance trace compression, raw-frame ring buffer (10 min), blue flag detection, penalty serving verification. |
 | `broadcast.js` | `broadcastToViewers()`, `sendToViewer()` — message delivery. |
 | `protocol.js` | `MSG` constants — shared vocabulary between agent, server, and all clients. |
 | `session-recorder.js` | `SessionRecorder` class — appends every frame, lap, incident, penalty, and event to per-session NDJSON files in `data/sessions/`. |
@@ -142,8 +142,6 @@ Node.js + Express + ws. Single process on the droplet. Three websocket endpoints
 **Raw-frame ring buffer:** Pre-allocated array of 12,000 slots per driver (600 seconds / 10 minutes at 20Hz, ~2.5MB). Circular write on every frame. `getRawFrames(driverId, startTime, endTime)` queries by sessionTime range — powers incident review telemetry.
 
 **Blue flag detection:** Every frame, compares all connected driver pairs. If a lapping car (more laps completed) is within 5% track distance of a slower car for >8 seconds continuously, fires `blueFlag:violation`. 60-second cooldown per pair.
-
-**Contact detection:** Every frame, finds all drivers with |latG| > 2.5g. If two spiking drivers are within 0.5% track distance, fires `contact:detected`. 30-second cooldown per pair.
 
 **Incident tracking:** Watches each driver's `incidents` field (iRacing's cumulative `PlayerCarMyIncidentCount`). When it increments, fires `incident:flagged` with the delta, classified as `contact` (2x+) or `off-track` (1x).
 
@@ -315,7 +313,6 @@ All websocket messages use `{ type, payload }` format.
 | `event` | `{ id, type, timestamp, data }` | Any event |
 | `incident:flagged` | `{ driverId, delta, newCount, sessionTime }` | Incident count change |
 | `blueFlag:violation` | `{ slowDriverId, fastDriverId, duration }` | Blue flag held >8s |
-| `contact:detected` | `{ driverAId, driverBId, latGA, latGB }` | Simultaneous lat-G spike |
 | `penalty:served` | `{ driverId, penaltyType }` | DT/SG completed |
 | `driver:protest` | `{ driverId, driverName, sessionTime, reason }` | Driver protest |
 
@@ -396,9 +393,6 @@ All websocket messages use `{ type, payload }` format.
 | Blue flag proximity | `BLUE_FLAG_PROXIMITY` | 5% track distance | How close cars must be |
 | Blue flag duration | `BLUE_FLAG_VIOLATION_SECONDS` | 8 seconds | How long before flagging |
 | Blue flag cooldown | Per-pair cooldown | 60 seconds | Prevent re-flagging |
-| Contact lat-G | `CONTACT_LAT_G_THRESHOLD` | 2.5g | Minimum G-force spike |
-| Contact proximity | `CONTACT_PROXIMITY` | 0.5% track distance | How close for contact |
-| Contact cooldown | `CONTACT_COOLDOWN_SECONDS` | 30 seconds | Prevent re-detection |
 
 ---
 
