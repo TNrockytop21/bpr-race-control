@@ -28,22 +28,19 @@ namespace BPRRaceControl
         private TextBlock _updateText;
         private Button _updateButton;
 
-        // ── Color palette ────────────────────────────────────────────
-        static readonly string BG = "#0a0a0e";
-        static readonly string CARD = "#111116";
-        static readonly string CARD_BORDER = "#252530";
-        static readonly string INPUT_BG = "#0d0d12";
-        static readonly string INPUT_BORDER = "#2a2a35";
-        static readonly string TEXT_PRIMARY = "#f0f0f0";
-        static readonly string TEXT_SECONDARY = "#bbbbbb";
-        static readonly string TEXT_DIM = "#888888";
-        static readonly string TEXT_MUTED = "#666666";
-        static readonly string ACCENT_RED = "#c8102e";
-        static readonly string ACCENT_GOLD = "#d4a017";
-        static readonly string ACCENT_GREEN = "#22c55e";
-        static readonly string ACCENT_BLUE = "#378add";
+        // ── Motorsport Broadcast palette — bright text ────────────────
+        static readonly string BG = "#0e1015";
+        static readonly string CARD_BORDER = "#1c1f28";
+        static readonly string INPUT_BG = "#080a0f";
+        static readonly string TEXT_WHITE = "#ffffff";
+        static readonly string TEXT_BRIGHT = "#e8e8e8";
+        static readonly string TEXT_BODY = "#cccccc";
+        static readonly string TEXT_LABEL = "#aaaaaa";
+        static readonly string TEXT_HINT = "#808080";
+        static readonly string RED = "#c8102e";
+        static readonly string GOLD = "#d4a017";
+        static readonly string GREEN = "#22c55e";
         static readonly string DANGER = "#ef4444";
-        static readonly string SECTION_BG = "#0e0e14";
 
         public SettingsControl(BPRRaceControlPlugin plugin, PluginSettings settings,
             WebSocketClient wsClient, PluginUpdater updater, JoystickManager joystickManager)
@@ -76,6 +73,11 @@ namespace BPRRaceControl
             }
         }
 
+        private string VerStr
+        {
+            get { return "v" + (_updater != null ? _updater.CurrentVersion.ToString(3) : "1.0.0"); }
+        }
+
         private void BuildUI()
         {
             var scroll = new ScrollViewer
@@ -83,240 +85,206 @@ namespace BPRRaceControl
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             };
-
-            var root = new StackPanel { Margin = new Thickness(0) };
+            var root = new StackPanel();
 
             // ═══════════════════════════════════════════════════════════
-            // HEADER BAR
+            // RED HEADER BAR
             // ═══════════════════════════════════════════════════════════
-            var headerBar = new Border
+            var header = new Border
             {
-                Background = Brush(CARD),
-                BorderBrush = Brush(CARD_BORDER),
-                BorderThickness = new Thickness(0, 0, 0, 1),
-                Padding = new Thickness(28, 20, 28, 20),
+                Background = new LinearGradientBrush(
+                    Clr("#c8102e"), Clr("#8b0a1e"),
+                    new Point(0, 0), new Point(1, 1)),
+                Padding = new Thickness(28, 22, 28, 22),
             };
-            var headerRow = new StackPanel { Orientation = Orientation.Horizontal };
+            var headerStack = new StackPanel();
 
-            // Logo (compact)
+            // Logo
             try
             {
                 var asmDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
                 var logoPath = Path.Combine(asmDir, "bpr-logo.png");
                 if (File.Exists(logoPath))
                 {
-                    var bitmap = new BitmapImage();
-                    bitmap.BeginInit();
-                    bitmap.UriSource = new Uri(logoPath);
-                    bitmap.DecodePixelHeight = 100;
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.EndInit();
-
-                    headerRow.Children.Add(new Image
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(logoPath);
+                    bmp.DecodePixelHeight = 120;
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.EndInit();
+                    headerStack.Children.Add(new Image
                     {
-                        Source = bitmap,
-                        Height = 65,
-                        Margin = new Thickness(0, 0, 20, 0),
-                        VerticalAlignment = VerticalAlignment.Center,
+                        Source = bmp,
+                        Height = 55,
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        Margin = new Thickness(0, 0, 0, 10),
                     });
                 }
             }
             catch { }
 
-            // Title block
-            var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
-            titleRow.Children.Add(new TextBlock
+            headerStack.Children.Add(new TextBlock
             {
-                Text = "RACE CONTROL",
-                Foreground = Brush(TEXT_PRIMARY),
+                Text = "BPR RACE CONTROL",
+                Foreground = Brush(TEXT_WHITE),
                 FontSize = 24,
-                FontWeight = FontWeights.Bold,
-                VerticalAlignment = VerticalAlignment.Center,
+                FontWeight = FontWeights.ExtraBold,
             });
-            titleRow.Children.Add(new Border
+            headerStack.Children.Add(new TextBlock
             {
-                Background = Brush(ACCENT_RED),
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(10, 3, 10, 3),
-                Margin = new Thickness(14, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = new TextBlock
-                {
-                    Text = "LIVE",
-                    Foreground = Brush("#ffffff"),
-                    FontSize = 10,
-                    FontWeight = FontWeights.Bold,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-            });
-            titleStack.Children.Add(titleRow);
-
-            var verStr = "v" + (_updater != null ? _updater.CurrentVersion.ToString(3) : "1.0.0");
-            titleStack.Children.Add(new TextBlock
-            {
-                Text = "SimHub Telemetry Agent  " + verStr,
-                Foreground = Brush(TEXT_DIM),
+                Text = "SimHub Telemetry Agent  " + VerStr,
+                Foreground = Brush("rgba(255,255,255,0.6)"),
                 FontSize = 12,
                 Margin = new Thickness(0, 4, 0, 0),
             });
-            headerRow.Children.Add(titleStack);
-            headerBar.Child = headerRow;
-            root.Children.Add(headerBar);
+            header.Child = headerStack;
+            root.Children.Add(header);
 
-            // ── Content area ─────────────────────────────────────────
-            var content = new StackPanel { Margin = new Thickness(28, 24, 28, 28) };
+            // ── Body ─────────────────────────────────────────────────
+            var body = new StackPanel { Margin = new Thickness(28, 24, 28, 28) };
 
             // ═══════════════════════════════════════════════════════════
-            // UPDATE BANNER (hidden by default)
+            // UPDATE BANNER
             // ═══════════════════════════════════════════════════════════
             _updateBanner = new Border
             {
                 Background = Brush("#071207"),
-                BorderBrush = Brush(ACCENT_GREEN),
+                BorderBrush = Brush(GREEN),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(16, 12, 16, 12),
-                Margin = new Thickness(0, 0, 0, 16),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(18, 14, 18, 14),
+                Margin = new Thickness(0, 0, 0, 20),
                 Visibility = Visibility.Collapsed,
             };
-            var updateRow = new StackPanel { Orientation = Orientation.Horizontal };
+            var updRow = new StackPanel { Orientation = Orientation.Horizontal };
             _updateText = new TextBlock
             {
                 Text = "Update available",
-                Foreground = Brush(ACCENT_GREEN),
+                Foreground = Brush(GREEN),
                 FontSize = 15,
-                FontWeight = FontWeights.SemiBold,
+                FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            updateRow.Children.Add(_updateText);
-            _updateButton = ActionButton("INSTALL UPDATE", ACCENT_GREEN, "#000000");
+            updRow.Children.Add(_updateText);
+            _updateButton = MakeButton("INSTALL UPDATE", GREEN, "#000000");
             _updateButton.Margin = new Thickness(16, 0, 0, 0);
             _updateButton.Click += UpdateButton_Click;
-            updateRow.Children.Add(_updateButton);
-            _updateBanner.Child = updateRow;
-            content.Children.Add(_updateBanner);
+            updRow.Children.Add(_updateButton);
+            _updateBanner.Child = updRow;
+            body.Children.Add(_updateBanner);
 
             // ═══════════════════════════════════════════════════════════
             // CONNECTION
             // ═══════════════════════════════════════════════════════════
-            content.Children.Add(Section("CONNECTION"));
+            body.Children.Add(SectionHeader("CONNECTION"));
 
-            var connCard = Card();
-            var connGrid = new Grid();
-            connGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            connGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            // Left side: status + URL
-            var connLeft = new StackPanel();
-
-            var statusRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
+            var statusRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
             _statusDot = new Ellipse
             {
                 Width = 10, Height = 10,
                 Fill = Brush(DANGER),
-                Margin = new Thickness(0, 0, 8, 0),
+                Margin = new Thickness(0, 0, 10, 0),
                 VerticalAlignment = VerticalAlignment.Center,
             };
             statusRow.Children.Add(_statusDot);
             _statusText = new TextBlock
             {
                 Text = "Disconnected",
-                Foreground = Brush(TEXT_SECONDARY),
+                Foreground = Brush(TEXT_BODY),
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
             };
             statusRow.Children.Add(_statusText);
-            connLeft.Children.Add(statusRow);
+            body.Children.Add(statusRow);
 
-            connLeft.Children.Add(FieldLabel("SERVER"));
+            body.Children.Add(Label("SERVER"));
             _serverUrlInput = new TextBox
             {
                 Text = _settings.ServerUrl,
                 Background = Brush(INPUT_BG),
-                Foreground = Brush(TEXT_PRIMARY),
-                BorderBrush = Brush(INPUT_BORDER),
+                Foreground = Brush(TEXT_BRIGHT),
+                BorderBrush = Brush(CARD_BORDER),
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(12, 10, 12, 10),
                 FontSize = 14,
                 FontFamily = new FontFamily("Consolas"),
-                CaretBrush = Brush(TEXT_PRIMARY),
-                Margin = new Thickness(0, 0, 0, 12),
+                CaretBrush = Brush(TEXT_WHITE),
+                Margin = new Thickness(0, 0, 0, 14),
             };
-            _serverUrlInput.TextChanged += ServerUrl_Changed;
-            connLeft.Children.Add(_serverUrlInput);
+            _serverUrlInput.TextChanged += (s, e) =>
+            {
+                if (_settings != null) { _settings.ServerUrl = _serverUrlInput.Text; _plugin.SaveSettings(); }
+            };
+            body.Children.Add(_serverUrlInput);
 
-            var connBtnRow = new StackPanel { Orientation = Orientation.Horizontal };
-            _connectButton = ActionButton("CONNECT", ACCENT_RED, "#ffffff");
-            _connectButton.Click += ConnectButton_Click;
-            connBtnRow.Children.Add(_connectButton);
+            var connRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 0) };
+            _connectButton = MakeButton("CONNECT", RED, TEXT_WHITE);
+            _connectButton.Click += (s, e) => { if (_wsClient.IsConnected) _plugin.Disconnect(); else _plugin.Connect(); };
+            connRow.Children.Add(_connectButton);
 
             _autoConnectCheck = new CheckBox
             {
                 Content = "Auto-connect when iRacing starts",
-                Foreground = Brush(TEXT_SECONDARY),
+                Foreground = Brush(TEXT_BODY),
                 FontSize = 13,
                 IsChecked = _settings.AutoConnect,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(16, 0, 0, 0),
             };
-            _autoConnectCheck.Checked += AutoConnect_Changed;
-            _autoConnectCheck.Unchecked += AutoConnect_Changed;
-            connBtnRow.Children.Add(_autoConnectCheck);
-            connLeft.Children.Add(connBtnRow);
-
-            Grid.SetColumn(connLeft, 0);
-            connGrid.Children.Add(connLeft);
-            connCard.Child = connGrid;
-            content.Children.Add(connCard);
-
-            content.Children.Add(Spacer(20));
+            _autoConnectCheck.Checked += (s, e) => { if (_settings != null) { _settings.AutoConnect = true; _plugin.SaveSettings(); } };
+            _autoConnectCheck.Unchecked += (s, e) => { if (_settings != null) { _settings.AutoConnect = false; _plugin.SaveSettings(); } };
+            connRow.Children.Add(_autoConnectCheck);
+            body.Children.Add(connRow);
 
             // ═══════════════════════════════════════════════════════════
             // INCIDENT REPORTING
             // ═══════════════════════════════════════════════════════════
-            content.Children.Add(Section("INCIDENT REPORTING"));
+            body.Children.Add(SectionHeader("INCIDENT REPORTING"));
 
-            var actionsCard = Card();
-            var actionsStack = new StackPanel();
-
-            // Report button row
-            var protestRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
-            _protestButton = ActionButton("REPORT INCIDENT", "#1a1a1e", DANGER);
+            var protestRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 18) };
+            _protestButton = MakeButton("REPORT INCIDENT", "transparent", DANGER);
             _protestButton.BorderBrush = Brush(DANGER);
             _protestButton.BorderThickness = new Thickness(1);
-            _protestButton.Click += ProtestButton_Click;
+            _protestButton.Click += (s, e) =>
+            {
+                _plugin.SendProtest();
+                _protestButton.Content = "REPORTED";
+                _protestButton.IsEnabled = false;
+                var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+                t.Tick += (s2, e2) => { t.Stop(); _protestButton.Content = "REPORT INCIDENT"; _protestButton.IsEnabled = true; };
+                t.Start();
+            };
             protestRow.Children.Add(_protestButton);
             protestRow.Children.Add(new TextBlock
             {
-                Text = "10 second cooldown between reports",
-                Foreground = Brush(TEXT_DIM),
-                FontSize = 12,
+                Text = "10s cooldown",
+                Foreground = Brush(TEXT_LABEL),
+                FontSize = 13,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(14, 0, 0, 0),
             });
-            actionsStack.Children.Add(protestRow);
+            body.Children.Add(protestRow);
 
-            // Two-column: Hotkey | Wheel binding
-            var bindGrid = new Grid { Margin = new Thickness(0, 0, 0, 0) };
+            // Two-column bindings
+            var bindGrid = new Grid();
             bindGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             bindGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            // Left: Keyboard hotkey
-            var hotkeyPanel = new StackPanel { Margin = new Thickness(0, 0, 10, 0) };
-            hotkeyPanel.Children.Add(FieldLabel("KEYBOARD SHORTCUT"));
+            // Left: keyboard
+            var kbPanel = new StackPanel { Margin = new Thickness(0, 0, 14, 0) };
+            kbPanel.Children.Add(Label("KEYBOARD"));
             var hotkeyInput = new TextBox
             {
                 Text = _settings.ProtestHotkey,
                 Background = Brush(INPUT_BG),
-                Foreground = Brush(TEXT_PRIMARY),
-                BorderBrush = Brush(INPUT_BORDER),
+                Foreground = Brush(TEXT_BRIGHT),
+                BorderBrush = Brush(CARD_BORDER),
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(12, 10, 12, 10),
                 FontSize = 14,
                 FontFamily = new FontFamily("Consolas"),
-                CaretBrush = Brush(TEXT_PRIMARY),
+                CaretBrush = Brush(TEXT_WHITE),
                 Margin = new Thickness(0, 0, 0, 4),
             };
             hotkeyInput.TextChanged += (s, e) =>
@@ -325,245 +293,197 @@ namespace BPRRaceControl
                 _plugin.SaveSettings();
                 _plugin.ReregisterHotkey();
             };
-            hotkeyPanel.Children.Add(hotkeyInput);
-            hotkeyPanel.Children.Add(new TextBlock
-            {
-                Text = "F1, Ctrl+F5, Shift+F2, etc.",
-                Foreground = Brush(TEXT_MUTED),
-                FontSize = 10,
-            });
-            Grid.SetColumn(hotkeyPanel, 0);
-            bindGrid.Children.Add(hotkeyPanel);
+            kbPanel.Children.Add(hotkeyInput);
+            kbPanel.Children.Add(Hint("F1, Ctrl+F5, Shift+F2"));
+            Grid.SetColumn(kbPanel, 0);
+            bindGrid.Children.Add(kbPanel);
 
-            // Right: Wheel button
-            var wheelPanel = new StackPanel { Margin = new Thickness(10, 0, 0, 0) };
-            wheelPanel.Children.Add(FieldLabel("WHEEL / BUTTON BOX"));
+            // Right: wheel
+            var wPanel = new StackPanel { Margin = new Thickness(14, 0, 0, 0) };
+            wPanel.Children.Add(Label("WHEEL BUTTON"));
 
             var bindBtnRow = new StackPanel { Orientation = Orientation.Horizontal };
-            var bindBtn = ActionButton("BIND", ACCENT_GOLD, "#000000");
+            var bindBtn = MakeButton("BIND", GOLD, "#000000");
 
-            var bindStatus = new TextBlock
+            var bindLabel = new TextBlock
             {
-                Foreground = Brush(TEXT_SECONDARY),
-                FontSize = 13,
+                Foreground = Brush(GOLD),
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(10, 0, 0, 0),
+                Margin = new Thickness(12, 0, 0, 0),
             };
 
             if (_settings.WheelButtonIndex >= 0 && !string.IsNullOrEmpty(_settings.WheelDeviceName))
-            {
-                bindStatus.Text = "Btn " + (_settings.WheelButtonIndex + 1);
-                bindStatus.Foreground = Brush(ACCENT_GOLD);
-            }
+                bindLabel.Text = "Btn " + (_settings.WheelButtonIndex + 1);
             else
             {
-                bindStatus.Text = "Not bound";
+                bindLabel.Text = "Not bound";
+                bindLabel.Foreground = Brush(TEXT_LABEL);
             }
 
             bindBtn.Click += (s, e) =>
             {
                 bindBtn.Content = "PRESS...";
                 bindBtn.IsEnabled = false;
-                bindStatus.Text = "Waiting...";
-                bindStatus.Foreground = Brush("#f59e0b");
+                bindLabel.Text = "Waiting...";
+                bindLabel.Foreground = Brush("#f59e0b");
 
-                _joystickManager.OnButtonCaptured += (deviceName, deviceGuid, buttonIndex) =>
+                _joystickManager.OnButtonCaptured += (dn, dg, bi) =>
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        _settings.WheelDeviceGuid = deviceGuid.ToString();
-                        _settings.WheelDeviceName = deviceName;
-                        _settings.WheelButtonIndex = buttonIndex;
+                        _settings.WheelDeviceGuid = dg.ToString();
+                        _settings.WheelDeviceName = dn;
+                        _settings.WheelButtonIndex = bi;
                         _plugin.SaveSettings();
-                        _joystickManager.SetBinding(deviceGuid, buttonIndex);
-
-                        bindStatus.Text = "Btn " + (buttonIndex + 1);
-                        bindStatus.Foreground = Brush(ACCENT_GOLD);
+                        _joystickManager.SetBinding(dg, bi);
+                        bindLabel.Text = "Btn " + (bi + 1);
+                        bindLabel.Foreground = Brush(GOLD);
                         bindBtn.Content = "BIND";
                         bindBtn.IsEnabled = true;
                     }));
                 };
                 _joystickManager.StartCapture();
 
-                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-                timer.Tick += (s2, e2) =>
+                var tmr = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+                tmr.Tick += (s2, e2) =>
                 {
-                    timer.Stop();
+                    tmr.Stop();
                     _joystickManager.StopCapture();
                     if (bindBtn.Content.ToString() == "PRESS...")
                     {
                         bindBtn.Content = "BIND";
                         bindBtn.IsEnabled = true;
-                        bindStatus.Text = _settings.WheelButtonIndex >= 0
-                            ? "Btn " + (_settings.WheelButtonIndex + 1) : "Not bound";
-                        bindStatus.Foreground = _settings.WheelButtonIndex >= 0
-                            ? Brush(ACCENT_GOLD) : Brush(TEXT_SECONDARY);
+                        bindLabel.Text = _settings.WheelButtonIndex >= 0 ? "Btn " + (_settings.WheelButtonIndex + 1) : "Not bound";
+                        bindLabel.Foreground = _settings.WheelButtonIndex >= 0 ? Brush(GOLD) : Brush(TEXT_LABEL);
                     }
                 };
-                timer.Start();
+                tmr.Start();
             };
 
             bindBtnRow.Children.Add(bindBtn);
-            bindBtnRow.Children.Add(bindStatus);
+            bindBtnRow.Children.Add(bindLabel);
 
             if (_settings.WheelButtonIndex >= 0)
             {
-                var clearBtn = new Button
+                var clr = new Button
                 {
                     Content = "x",
                     Background = Brushes.Transparent,
-                    Foreground = Brush(TEXT_DIM),
+                    Foreground = Brush(TEXT_HINT),
                     BorderThickness = new Thickness(0),
-                    FontSize = 10,
+                    FontSize = 11,
                     Cursor = System.Windows.Input.Cursors.Hand,
                     VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(6, 0, 0, 0),
+                    Margin = new Thickness(8, 0, 0, 0),
                     Padding = new Thickness(4, 2, 4, 2),
                 };
-                clearBtn.Click += (s, e) =>
+                clr.Click += (s, e) =>
                 {
                     _settings.WheelDeviceGuid = "";
                     _settings.WheelDeviceName = "";
                     _settings.WheelButtonIndex = -1;
                     _plugin.SaveSettings();
                     _joystickManager.ClearBinding();
-                    bindStatus.Text = "Not bound";
-                    bindStatus.Foreground = Brush(TEXT_SECONDARY);
-                    clearBtn.Visibility = Visibility.Collapsed;
+                    bindLabel.Text = "Not bound";
+                    bindLabel.Foreground = Brush(TEXT_LABEL);
+                    clr.Visibility = Visibility.Collapsed;
                 };
-                bindBtnRow.Children.Add(clearBtn);
+                bindBtnRow.Children.Add(clr);
             }
 
-            wheelPanel.Children.Add(bindBtnRow);
-            wheelPanel.Children.Add(new TextBlock
-            {
-                Text = _settings.WheelButtonIndex >= 0 ? _settings.WheelDeviceName : "Press BIND then press a wheel button",
-                Foreground = Brush(TEXT_MUTED),
-                FontSize = 9,
-                Margin = new Thickness(0, 4, 0, 0),
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            });
-            Grid.SetColumn(wheelPanel, 1);
-            bindGrid.Children.Add(wheelPanel);
-
-            actionsStack.Children.Add(bindGrid);
-            actionsCard.Child = actionsStack;
-            content.Children.Add(actionsCard);
-
-            content.Children.Add(Spacer(20));
+            wPanel.Children.Add(bindBtnRow);
+            wPanel.Children.Add(Hint(_settings.WheelButtonIndex >= 0 ? _settings.WheelDeviceName : "Click BIND, then press wheel button"));
+            Grid.SetColumn(wPanel, 1);
+            bindGrid.Children.Add(wPanel);
+            body.Children.Add(bindGrid);
 
             // ═══════════════════════════════════════════════════════════
             // NOTIFICATIONS
             // ═══════════════════════════════════════════════════════════
-            content.Children.Add(Section("NOTIFICATIONS"));
+            body.Children.Add(SectionHeader("NOTIFICATIONS"));
 
-            var notifCard = Card();
-            var notifStack = new StackPanel();
+            body.Children.Add(ToggleRow("Penalty decisions",
+                "Drive-through, stop & go, time, DSQ, warnings",
+                _settings.ShowPenaltyOverlay, v => { _settings.ShowPenaltyOverlay = v; _plugin.SaveSettings(); }));
 
-            notifStack.Children.Add(Toggle("Penalty decisions",
-                "Drive-through, stop & go, time penalties, DSQ, warnings",
-                _settings.ShowPenaltyOverlay, (v) => { _settings.ShowPenaltyOverlay = v; _plugin.SaveSettings(); }));
-
-            notifStack.Children.Add(Divider());
-
-            notifStack.Children.Add(Toggle("Race control messages",
+            body.Children.Add(ToggleRow("Race control messages",
                 "Steward broadcasts to all drivers",
-                _settings.ShowRCMessageOverlay, (v) => { _settings.ShowRCMessageOverlay = v; _plugin.SaveSettings(); }));
+                _settings.ShowRCMessageOverlay, v => { _settings.ShowRCMessageOverlay = v; _plugin.SaveSettings(); }));
 
-            notifStack.Children.Add(Divider());
-
-            notifStack.Children.Add(Toggle("Under investigation",
-                "Notification when your incident is being reviewed",
-                _settings.ShowInvestigationOverlay, (v) => { _settings.ShowInvestigationOverlay = v; _plugin.SaveSettings(); }));
-
-            notifCard.Child = notifStack;
-            content.Children.Add(notifCard);
-
-            content.Children.Add(Spacer(20));
+            body.Children.Add(ToggleRow("Under investigation",
+                "When your incident is being reviewed",
+                _settings.ShowInvestigationOverlay, v => { _settings.ShowInvestigationOverlay = v; _plugin.SaveSettings(); }));
 
             // ═══════════════════════════════════════════════════════════
             // ADVANCED
             // ═══════════════════════════════════════════════════════════
-            content.Children.Add(Section("ADVANCED"));
+            body.Children.Add(SectionHeader("ADVANCED"));
 
-            var advCard = Card();
-            var advStack = new StackPanel();
+            body.Children.Add(Label("SIMHUB PROPERTIES"));
 
-            advStack.Children.Add(FieldLabel("SIMHUB PROPERTIES"));
-            advStack.Children.Add(new TextBlock
+            var chipWrap = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+            foreach (var p in new[] { "Connected", "LastPenalty", "UnderInvestigation", "LastRCMessage", "ProtestCooldown" })
             {
-                Text = "Use in Dash Studio overlays or NCalc formulas",
-                Foreground = Brush(TEXT_MUTED),
-                FontSize = 9,
-                Margin = new Thickness(0, 0, 0, 8),
-            });
-
-            var propsPanel = new WrapPanel();
-            foreach (var prop in new[] {
-                "Connected", "LastPenalty", "UnderInvestigation", "LastRCMessage", "ProtestCooldown" })
-            {
-                propsPanel.Children.Add(new Border
+                chipWrap.Children.Add(new Border
                 {
-                    Background = Brush(SECTION_BG),
-                    BorderBrush = Brush(INPUT_BORDER),
+                    Background = Brush(INPUT_BG),
+                    BorderBrush = Brush(CARD_BORDER),
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(3),
-                    Padding = new Thickness(8, 4, 8, 4),
-                    Margin = new Thickness(0, 0, 6, 6),
+                    Padding = new Thickness(10, 5, 10, 5),
+                    Margin = new Thickness(0, 0, 8, 8),
                     Child = new TextBlock
                     {
-                        Text = "BPRRaceControl." + prop,
-                        Foreground = Brush(ACCENT_GOLD),
+                        Text = "BPRRaceControl." + p,
+                        Foreground = Brush(GOLD),
                         FontSize = 12,
                         FontFamily = new FontFamily("Consolas"),
                     },
                 });
             }
-            advStack.Children.Add(propsPanel);
+            body.Children.Add(chipWrap);
 
-            // Check for updates
-            advStack.Children.Add(Spacer(12));
-            var checkBtn = new Button
+            // Check for updates link
+            var chkBtn = new Button
             {
                 Content = "Check for Updates",
                 Background = Brushes.Transparent,
-                Foreground = Brush(TEXT_DIM),
+                Foreground = Brush(TEXT_HINT),
                 BorderThickness = new Thickness(0),
-                Padding = new Thickness(0, 4, 0, 4),
-                FontSize = 10,
+                Padding = new Thickness(0, 8, 0, 4),
+                FontSize = 12,
                 Cursor = System.Windows.Input.Cursors.Hand,
                 HorizontalAlignment = HorizontalAlignment.Left,
             };
-            checkBtn.Click += (s, e) =>
+            chkBtn.Click += (s, e) =>
             {
-                checkBtn.Content = "Checking...";
-                checkBtn.IsEnabled = false;
+                chkBtn.Content = "Checking...";
+                chkBtn.IsEnabled = false;
                 _updater.OnUpdateCheckComplete += () =>
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        checkBtn.Content = _updater.UpdateAvailable ? "Update found!" : "Up to date  " + verStr;
-                        checkBtn.IsEnabled = true;
+                        chkBtn.Content = _updater.UpdateAvailable ? "Update found!" : "Up to date  " + VerStr;
+                        chkBtn.Foreground = _updater.UpdateAvailable ? Brush(GREEN) : Brush(TEXT_HINT);
+                        chkBtn.IsEnabled = true;
                         RefreshUpdateBanner();
                     }));
                 _updater.CheckForUpdateAsync();
             };
-            advStack.Children.Add(checkBtn);
-
-            advCard.Child = advStack;
-            content.Children.Add(advCard);
-
-            content.Children.Add(Spacer(16));
+            body.Children.Add(chkBtn);
 
             // Footer
-            content.Children.Add(new TextBlock
+            body.Children.Add(new Border { Height = 16 });
+            body.Children.Add(new TextBlock
             {
-                Text = "Bite Point Racing  |  github.com/TNrockytop21/bpr-race-control",
-                Foreground = Brush(TEXT_MUTED),
-                FontSize = 9,
+                Text = "Bite Point Racing  |  bitepointracing.com",
+                Foreground = Brush(TEXT_HINT),
+                FontSize = 10,
                 HorizontalAlignment = HorizontalAlignment.Center,
             });
 
-            root.Children.Add(content);
+            root.Children.Add(body);
             scroll.Content = root;
             Content = scroll;
         }
@@ -572,60 +492,29 @@ namespace BPRRaceControl
 
         public void UpdateConnectionStatus(bool connected)
         {
-            if (!Dispatcher.CheckAccess())
-            {
-                Dispatcher.BeginInvoke(new Action(() => UpdateConnectionStatus(connected)));
-                return;
-            }
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => UpdateConnectionStatus(connected))); return; }
 
             if (connected)
             {
-                _statusDot.Fill = Brush(ACCENT_GREEN);
+                _statusDot.Fill = Brush(GREEN);
                 _statusText.Text = "Connected";
-                _statusText.Foreground = Brush(ACCENT_GREEN);
+                _statusText.Foreground = Brush(GREEN);
                 _connectButton.Content = "DISCONNECT";
-                _connectButton.Background = Brush("#1a1a1e");
-                _connectButton.Foreground = Brush(TEXT_SECONDARY);
-                _connectButton.BorderBrush = Brush(INPUT_BORDER);
+                _connectButton.Background = Brush(INPUT_BG);
+                _connectButton.Foreground = Brush(TEXT_BODY);
+                _connectButton.BorderBrush = Brush(CARD_BORDER);
                 _connectButton.BorderThickness = new Thickness(1);
             }
             else
             {
                 _statusDot.Fill = Brush(DANGER);
                 _statusText.Text = "Disconnected";
-                _statusText.Foreground = Brush(TEXT_SECONDARY);
+                _statusText.Foreground = Brush(TEXT_BODY);
                 _connectButton.Content = "CONNECT";
-                _connectButton.Background = Brush(ACCENT_RED);
-                _connectButton.Foreground = Brush("#ffffff");
+                _connectButton.Background = Brush(RED);
+                _connectButton.Foreground = Brush(TEXT_WHITE);
                 _connectButton.BorderThickness = new Thickness(0);
             }
-        }
-
-        // ── Events ───────────────────────────────────────────────────
-
-        private void ConnectButton_Click(object s, RoutedEventArgs e)
-        {
-            if (_wsClient.IsConnected) _plugin.Disconnect(); else _plugin.Connect();
-        }
-
-        private void ServerUrl_Changed(object s, TextChangedEventArgs e)
-        {
-            if (_settings != null) { _settings.ServerUrl = _serverUrlInput.Text; _plugin.SaveSettings(); }
-        }
-
-        private void AutoConnect_Changed(object s, RoutedEventArgs e)
-        {
-            if (_settings != null) { _settings.AutoConnect = _autoConnectCheck.IsChecked == true; _plugin.SaveSettings(); }
-        }
-
-        private void ProtestButton_Click(object s, RoutedEventArgs e)
-        {
-            _plugin.SendProtest();
-            _protestButton.Content = "REPORTED";
-            _protestButton.IsEnabled = false;
-            var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
-            t.Tick += (s2, e2) => { t.Stop(); _protestButton.Content = "REPORT INCIDENT"; _protestButton.IsEnabled = true; };
-            t.Start();
         }
 
         private void RefreshUpdateBanner()
@@ -646,50 +535,60 @@ namespace BPRRaceControl
             _updater.DownloadAndApplyUpdate();
         }
 
-        // ── UI Factories ─────────────────────────────────────────────
+        // ── UI Builders ──────────────────────────────────────────────
 
-        private static SolidColorBrush Brush(string hex)
+        static SolidColorBrush Brush(string hex)
         {
-            return new SolidColorBrush((System.Windows.Media.Color)ColorConverter.ConvertFromString(hex));
+            if (hex.StartsWith("rgba")) return new SolidColorBrush(Colors.White) { Opacity = 0.6 };
+            if (hex == "transparent") return Brushes.Transparent as SolidColorBrush ?? new SolidColorBrush(Colors.Transparent);
+            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
         }
 
-        private static Border Card()
+        static Color Clr(string hex) { return (Color)ColorConverter.ConvertFromString(hex); }
+
+        /// <summary>Red-underlined section header — the signature motorsport look.</summary>
+        static Border SectionHeader(string text)
         {
             return new Border
             {
-                Background = Brush(CARD),
                 BorderBrush = Brush(CARD_BORDER),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(22, 20, 22, 20),
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Margin = new Thickness(0, 28, 0, 14),
+                Padding = new Thickness(0, 0, 0, 8),
+                Child = new TextBlock
+                {
+                    Text = text,
+                    Foreground = Brush(RED),
+                    FontSize = 12,
+                    FontWeight = FontWeights.Bold,
+                },
             };
         }
 
-        private static TextBlock Section(string text)
+        static TextBlock Label(string text)
         {
             return new TextBlock
             {
                 Text = text,
-                Foreground = Brush(TEXT_SECONDARY),
-                FontSize = 12,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(2, 0, 0, 10),
-            };
-        }
-
-        private static TextBlock FieldLabel(string text)
-        {
-            return new TextBlock
-            {
-                Text = text,
-                Foreground = Brush(TEXT_DIM),
+                Foreground = Brush(TEXT_LABEL),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(0, 0, 0, 6),
             };
         }
 
-        private static Button ActionButton(string text, string bg, string fg)
+        static TextBlock Hint(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                Foreground = Brush(TEXT_HINT),
+                FontSize = 10,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+        }
+
+        static Button MakeButton(string text, string bg, string fg)
         {
             return new Button
             {
@@ -705,58 +604,49 @@ namespace BPRRaceControl
             };
         }
 
-        private static Border Spacer(double h) { return new Border { Height = h }; }
-
-        private static Border Divider()
+        /// <summary>Toggle row with checkbox, label, and description.</summary>
+        static Border ToggleRow(string label, string desc, bool isOn, Action<bool> onChange)
         {
-            return new Border
+            var row = new StackPanel
             {
-                Background = Brush(CARD_BORDER),
-                Height = 1,
-                Margin = new Thickness(0, 10, 0, 10),
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 0, 0),
             };
-        }
-
-        private static StackPanel Toggle(string label, string desc, bool isOn, Action<bool> onChange)
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal };
 
             var cb = new CheckBox
             {
                 IsChecked = isOn,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 2, 10, 0),
+                Margin = new Thickness(0, 3, 12, 0),
             };
+            cb.Checked += (s, e) => onChange(true);
+            cb.Unchecked += (s, e) => onChange(false);
 
-            var textStack = new StackPanel();
-            textStack.Children.Add(new TextBlock
+            var txt = new StackPanel();
+            txt.Children.Add(new TextBlock
             {
                 Text = label,
-                Foreground = Brush(TEXT_PRIMARY),
+                Foreground = Brush(TEXT_BRIGHT),
                 FontSize = 14,
             });
-            textStack.Children.Add(new TextBlock
+            txt.Children.Add(new TextBlock
             {
                 Text = desc,
-                Foreground = Brush(TEXT_DIM),
+                Foreground = Brush(TEXT_LABEL),
                 FontSize = 11,
                 Margin = new Thickness(0, 2, 0, 0),
             });
 
-            cb.Checked += (s, e) => onChange(true);
-            cb.Unchecked += (s, e) => onChange(false);
-
             row.Children.Add(cb);
-            row.Children.Add(textStack);
+            row.Children.Add(txt);
 
-            var wrapper = new StackPanel();
-            wrapper.Children.Add(row);
-            return wrapper;
-        }
-
-        private string verStr
-        {
-            get { return "v" + (_updater != null ? _updater.CurrentVersion.ToString(3) : "1.0.0"); }
+            return new Border
+            {
+                BorderBrush = Brush("#12141a"),
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Padding = new Thickness(0, 12, 0, 12),
+                Child = row,
+            };
         }
     }
 }

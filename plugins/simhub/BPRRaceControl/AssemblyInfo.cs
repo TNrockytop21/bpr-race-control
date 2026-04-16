@@ -5,5 +5,5 @@ using System.Reflection;
 [assembly: AssemblyCompany("Bite Point Racing")]
 [assembly: AssemblyProduct("BPRRaceControl")]
 [assembly: AssemblyCopyright("Copyright Bite Point Racing 2026")]
-[assembly: AssemblyVersion("1.3.1.0")]
-[assembly: AssemblyFileVersion("1.3.1.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
