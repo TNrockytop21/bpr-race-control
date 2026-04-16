@@ -8,21 +8,21 @@ Detailed description of every feature in the system, how it works from the user'
 
 ### 1. Live Driver Monitoring
 
-**What the steward sees:** A sidebar list of every driver connected to the server. Each row shows the driver's name, car, lap count, and a green/gray connection status dot.
+**What the steward sees:** A compact dropdown driver selector at the top of the sidebar. Shows how many drivers are selected and how many are online. Click to open a scrollable checklist of all connected drivers with checkboxes — handles 40+ drivers without taking up sidebar space.
 
 **How it works:** When a driver launches their agent and connects, the server broadcasts `driver:joined` to all stewards. The driver list updates in real-time. When a driver disconnects, they stay in the list but show as offline — their history and lap data remain accessible.
 
-**Interaction:** Click a driver to select them (highlighted in purple). Multiple drivers can be selected simultaneously. Selected drivers are used when flagging incidents — the "Flag" button creates an incident involving all currently selected drivers.
+**Interaction:** Click the dropdown to open, click drivers to toggle selection (checkmarks). Selected drivers shown in purple. Multiple drivers can be selected simultaneously. Selected drivers are used when flagging incidents. Close button at the bottom of the dropdown.
 
 ---
 
 ### 2. Incident Flagging (Manual)
 
-**What the steward does:** Selects one or more drivers from the driver list, optionally types a note, and clicks "Flag @ XX:XX" (showing the current session time).
+**What the steward does:** Selects one or more drivers from the driver dropdown, optionally types a note, and clicks "Flag @ XX:XX" (showing the current session time).
 
 **What happens:**
 - An incident entry is created with a unique ID, the current `sessionTime`, the list of involved driver IDs, and the steward's notes
-- The incident appears in the incident feed below the flag button
+- The incident appears in the incident feed below
 - The incident status is "open" (amber badge)
 
 **Technical flow:** This is entirely client-side in the steward app — the incident is stored in React state. It only hits the server when the steward clicks "Review" (which requests the raw-frame telemetry window).
@@ -40,11 +40,10 @@ Detailed description of every feature in the system, how it works from the user'
 - **Example:** "CONTACT — D. Newman +2x incident (total: 6)"
 
 #### 3b. Contact Detection
-- **Trigger:** Two drivers both experience |latG| > 1.8g simultaneously while within 2% track distance of each other
+- **Trigger:** Two drivers both experience |latG| > 2.5g simultaneously while within 0.5% track distance of each other
 - **Steward sees:** An incident tagged "CONTACT" with both drivers listed
 - **Example:** "CONTACT — Probable contact — D. Newman + A. Riegel"
-- **Cooldown:** Same pair won't re-trigger for 10 seconds
-- **Why both 3a and 3b:** 3a catches all incidents (including solo spins that iRacing counts). 3b specifically identifies *who was involved* in car-to-car contact by correlating telemetry across two cars.
+- **Cooldown:** Same pair won't re-trigger for 30 seconds
 
 #### 3c. Blue Flag Violation
 - **Trigger:** A lapping car (more laps completed) is within 5% track distance of a slower car for more than 8 continuous seconds
@@ -66,9 +65,11 @@ Detailed description of every feature in the system, how it works from the user'
 | Driver Report | ON | Protests filed by drivers |
 | Manual | ON | Steward-flagged incidents |
 
-**Why off-track is off by default:** 1x incidents are overwhelmingly off-tracks that don't require steward action. Showing them would flood the feed. Stewards can toggle them on if needed for a specific investigation.
+**Why off-track is off by default:** 1x incidents are overwhelmingly off-tracks that don't require steward action. Showing them would flood the feed.
 
 **Visual:** Each incident has a colored left border matching its category (red = contact, gray = 1x, blue = blue flag, amber = protest, purple = manual). The filtered count shows "X hidden" when filters are active.
+
+**Sort order:** Oldest at top, newest at bottom — chronological order for easy tracking.
 
 ---
 
@@ -77,14 +78,14 @@ Detailed description of every feature in the system, how it works from the user'
 **What the steward does:** Clicks "Review" on any incident in the feed.
 
 **What happens simultaneously:**
-1. **Telemetry loads:** The steward app sends `request:incidentWindow` to the server with the involved driver IDs, the incident's `sessionTime`, and a 20-second window. The server queries each driver's raw-frame ring buffer and returns the frames.
-2. **Charts render:** Four stacked uPlot charts appear — throttle, brake, speed, and steer — showing the involved drivers' data overlaid on the same time axis. Each driver gets a distinct color (purple, green, amber, blue, etc.). All four charts share a synced cursor — hover on one, the vertical line appears on all.
+1. **Telemetry loads:** The steward app sends `request:incidentWindow` to the server with the involved driver IDs, the incident's `sessionTime`, and a 20-second window. The server queries each driver's raw-frame ring buffer (10 minutes of history) and returns the frames.
+2. **Charts render:** Four stacked uPlot charts appear — throttle, brake, speed, and steer — showing the involved drivers' data overlaid on the same time axis. Each driver gets a distinct color. All four charts share a synced cursor and dynamically fill the available vertical space.
 3. **Drivers notified:** `notify:underInvestigation` is sent to the server, which forwards `server:underInvestigation` to each involved driver's agent. The driver sees an amber "INCIDENT UNDER INVESTIGATION" overlay on their screen.
-4. **Replay jumps (when SDK is connected):** `window.irsdk.replayJump(sessionTime)` is called, which (once wired to `node-irsdk-2023`) will scrub the steward's iRacing replay to the exact moment of the incident.
+4. **Replay jumps (when SDK is connected):** `window.irsdk.replayJump(sessionTime)` is called to scrub the steward's iRacing replay to the exact moment of the incident.
 
 **What the steward can read from the telemetry:**
-- Did the driver brake late? (Compare brake traces — the later braker is visible)
-- Did someone fail to leave space? (Steer trace shows sudden corrective input at the contact moment)
+- Did the driver brake late? (Compare brake traces)
+- Did someone fail to leave space? (Steer trace shows sudden corrective input)
 - How fast were they going? (Speed trace shows velocity delta)
 - Was it intentional? (Throttle trace shows if someone accelerated into contact)
 
@@ -92,21 +93,29 @@ Detailed description of every feature in the system, how it works from the user'
 
 ### 6. Replay Controls
 
-**What it provides:** A control bar with play/pause, speed selection, time jumping, driver switching, camera selection, and a live button.
+**What it provides:** A persistent control bar (visible on both Telemetry and Standings tabs) with playback, speed, jumping, driver switching, camera selection, and a live button.
 
 **Controls:**
 | Control | Options | What it does |
 |---------|---------|-------------|
 | Play/Pause | Toggle | Starts/stops replay playback |
-| LIVE | Button (red) | Jumps replay to live, resumes 1x speed |
-| Speed | ¼x, ½x, 1x, 2x, 4x | Sets replay playback speed |
+| LIVE | Red button | Jumps replay to live, resumes 1x speed |
+| Speed | 1/4x, 1/2x, 1x, 2x, 4x | Sets replay playback speed |
 | Jump | -10s, -5s, +5s, +10s | Scrubs replay forward/backward |
-| Driver | ◀ Name ▶ | Cycles through connected drivers, switches camera to selected car |
-| Camera | Cockpit, Chase, Far Chase, Front, Rear, Chopper, Blimp | Switches iRacing camera view for the focused driver |
+| Driver | < Name > | Cycles through connected drivers, switches camera |
+| Camera | Cockpit, Chase, Far Chase, Front, Rear, Chopper, Blimp | 7 camera views |
 
-**Technical:** All controls call through the Electron IPC bridge (`window.irsdk.replaySpeed()`, `replayJump()`, `replayCamera()`). Currently stubbed — logs to console. When `node-irsdk-2023` is integrated, these become actual `BroadcastMsg` calls to iRacing.
+**Technical:** All controls call through the Electron IPC bridge (`window.irsdk`). Currently stubbed — ready for `node-irsdk-2023` integration.
 
-**Keyboard shortcuts:** Space (play/pause), arrows (scrub), `[`/`]` (driver), 1-6 (cameras), Escape (cancel review), Tab (switch view).
+**Keyboard shortcuts:**
+| Key | Action |
+|-----|--------|
+| Space | Play/pause replay |
+| Left/Right | Jump -5s / +5s |
+| [ / ] | Previous / next driver |
+| 1-6 | Camera views |
+| Tab | Cycle tabs (Telemetry / Standings / Driver Summary) |
+| Escape | Cancel incident review |
 
 ---
 
@@ -131,7 +140,7 @@ Detailed description of every feature in the system, how it works from the user'
 3. The server forwards `server:penalty` to each driver's agent websocket
 4. Each driver sees a transparent overlay banner on their screen with the penalty type, color-coded, with steward notes. Fades after 8 seconds.
 5. The server logs a `penalty_issued` event visible to all viewers and the broadcast dashboard
-6. For drive-through and stop-go penalties, the server starts monitoring the driver's `onPitRoad` and `speed` to verify serving
+6. For drive-through and stop-go penalties, the server starts monitoring the driver to verify serving
 
 ---
 
@@ -143,7 +152,7 @@ Detailed description of every feature in the system, how it works from the user'
 
 **Stop & Go:** The server watches for the driver to enter pit road AND come to a stop (`speed < 1 m/s`). After stopping, when they exit pit road, `penalty:served` is broadcast.
 
-**What stewards/broadcast see:** A "SERVED" tagged event appears in the feed: "D. Newman served drive-through."
+**What stewards/broadcast see:** A "SERVED" tagged event appears in the feed.
 
 ---
 
@@ -159,7 +168,7 @@ Detailed description of every feature in the system, how it works from the user'
 
 **Driver experience:** The message appears as a top-center overlay banner. Color is auto-detected from content (red for "red flag" or "closed", amber for "yellow" or "caution", green for "green" or "open", white for everything else). Fades after 10 seconds. Click to dismiss.
 
-**Technical flow:** Steward sends `server:message` → server forwards to agent(s) via the reverse websocket channel → agent displays overlay. For "all drivers", the server iterates every entry in the `agentSockets` map.
+**Location:** Positioned above the incident list in the sidebar so it doesn't get buried by scrolling incidents.
 
 ---
 
@@ -170,11 +179,11 @@ Detailed description of every feature in the system, how it works from the user'
 **What happens:**
 1. Agent sends `agent:protest` with the driver's current `sessionTime`, `lap`, and `lapDist`
 2. Server broadcasts `driver:protest` to all stewards and viewers
-3. Server sends `server:protestAck` back to the driver → driver sees "PROTEST RECEIVED — STEWARDS NOTIFIED" overlay
+3. Server sends `server:protestAck` back to the driver — driver sees "PROTEST RECEIVED — STEWARDS NOTIFIED" overlay
 4. Steward sees a "PROTEST" tagged incident in amber in their incident feed
 5. 10-second cooldown on the button prevents spam
 
-**Why it matters:** Drivers can immediately flag an incident from their perspective. The steward gets the exact sessionTime so they can pull up the telemetry and replay. No radio communication needed.
+**Why it matters:** Drivers can immediately flag an incident from their perspective. The steward gets the exact sessionTime so they can pull up the telemetry and replay.
 
 ---
 
@@ -188,39 +197,66 @@ Detailed description of every feature in the system, how it works from the user'
 3. If the incident is already locked by another steward, the requesting steward gets a denial with the lock holder's name
 4. When a steward finishes reviewing (resolves or cancels), `steward:unlockIncident` releases the lock
 5. If a steward disconnects, all their locks are automatically released
-6. The steward roster and lock state are broadcast to all connected stewards via `steward:list`
+6. The steward roster and lock state are broadcast to all connected stewards
 
 ---
 
-### 12. Driver Incident Summary
+### 12. Driver Incident Summary (Dedicated Tab)
 
-**What it shows:** A table at the bottom of the steward app with one row per driver:
+**What it shows:** A full-page table accessible via the "Driver Summary" tab with one row per driver:
 
 | Column | What it shows |
 |--------|-------------|
 | Driver | Name + offline indicator |
 | Laps | Total laps completed |
-| Contact | Number of contact incidents involving this driver |
+| Contact | Number of contact incidents |
 | Off-Track | Number of 1x off-track incidents |
 | Blue Flag | Number of blue flag violations |
 | Inc Pts | Total incident points (sum of all deltas) |
-| Penalties | Number of penalties issued (excluding no-action and race-incident) |
+| Penalties | Number of penalties issued |
 
-**Color coding:** Contact count turns red when > 0. Incident points amber at ≤ 4, red at > 4. Penalty count red when > 0. Helps stewards spot repeat offenders.
+**Color coding:** Contact count turns red when > 0. Incident points amber at <= 4, red at > 4. Helps stewards spot repeat offenders.
 
----
-
-### 13. Track Map + Incident Heatmap
-
-**Track map:** Canvas rendering of the track shape (auto-generated from the first valid lap's telemetry). Live car position dots colored per driver, updated at animation frame rate. Amber ring on cars in pit road.
-
-**Incident heatmap:** Same track shape but colored by incident density. Brighter segments = more incidents at that part of the track. Individual incident dots colored by type (red = contact, blue = blue flag, amber = off-track). Builds throughout the session.
+**Report Export:** CSV and JSON export buttons alongside the summary table for post-race reports.
 
 ---
 
-### 14. Post-Race Report Export
+### 13. Track Map + Incident Heatmap (Standings Tab)
 
-**What it does:** Two buttons — "Export CSV" and "Export JSON" — that download a report file to the steward's machine.
+**Track map:** Canvas rendering of the track shape with live car position dots updated at animation frame rate. Pit road indicator (amber ring). Color-coded legend per driver.
+
+**Incident heatmap:** Same track shape but colored by incident density. Brighter segments = more incidents at that part of the track. Individual incident dots colored by type.
+
+**Location:** Both appear side-by-side on the Standings tab, keeping the Telemetry tab clean for incident review.
+
+---
+
+### 14. Live Standings (Dedicated Tab)
+
+**What it shows:** Full race standings table on the "Standings" tab:
+
+| Column | What it shows |
+|--------|-------------|
+| Pos | Race position (gold for P1, white for podium) |
+| # | Car number |
+| Class | Car class — LMP2 (red) or GT3 (amber) |
+| Driver | Driver name |
+| Laps | Laps completed |
+| Interval | Gap to car directly ahead |
+| Gap | Gap to race leader |
+| Best Lap | Personal best (purple if overall fastest) |
+| Last Lap | Most recent lap (green if personal best) |
+| S1/S2/S3 | Sector times (purple = overall best, green = PB) |
+| iR | iRating |
+| Pit | Amber "PIT" badge when on pit road |
+
+**Interaction:** Click any driver row to switch the iRacing camera to that car (chase view).
+
+---
+
+### 15. Post-Race Report Export
+
+**What it does:** Two buttons — "Export CSV" and "Export JSON" — on the Driver Summary tab.
 
 **CSV contents:**
 - Header: track name, date
@@ -228,35 +264,26 @@ Detailed description of every feature in the system, how it works from the user'
 - Penalties table: driver, penalty type, time seconds, notes
 - Driver summary: laps, contacts, off-tracks, blue flags, incident points, penalty count
 
-**JSON contents:** Same data in structured JSON format for programmatic consumption (website integration, Discord bots, etc.).
+**JSON contents:** Same data in structured JSON format for programmatic use.
 
 ---
 
-### 15. Live Standings
+### 16. Tabbed Interface
 
-**What it shows:** Full race standings table, switchable via the "Standings" tab:
+**Three main tabs in the steward app:**
+1. **Telemetry** — telemetry overlay charts, penalty panel (focused incident review)
+2. **Standings** — live race standings with track map and incident heatmap
+3. **Driver Summary** — per-driver statistics table with report export
 
-| Column | What it shows |
-|--------|-------------|
-| Pos | Race position (gold for P1, white for podium) |
-| # | Car number |
-| Driver | Driver name |
-| Laps | Laps completed |
-| Interval | Gap to car directly ahead |
-| Gap | Gap to race leader |
-| Best Lap | Personal best (purple if overall fastest) |
-| Last Lap | Most recent lap (green if personal best) |
-| S1/S2/S3 | Sector times (purple = overall best sector, green = personal best) |
-| iR | iRating (shown as "2.8k" format) |
-| Pit | Amber "PIT" badge when on pit road |
+**Replay controls** sit between the tab content and are always visible regardless of active tab.
 
-**Interaction:** Click any driver row to switch the iRacing camera to that car (chase view).
+Tab key cycles through all three views.
 
 ---
 
 ## DRIVER FEATURES
 
-### 16. Agent Connection
+### 17. Agent Connection
 
 **What the driver does:** Launches the agent (.exe), enters their iRacing name, clicks Connect.
 
@@ -266,66 +293,66 @@ Detailed description of every feature in the system, how it works from the user'
 
 ---
 
-### 17. Penalty Overlay Notifications
+### 18. Penalty Overlay Notifications
 
 **What the driver sees:** When a steward issues a decision involving them, a transparent overlay banner appears over their iRacing window:
 
 - Top-center position (below iRacing's own HUD at y=60px)
 - 92% opacity dark background
-- Colored accent stripe at top (red/amber/blue/green matching severity)
+- Colored accent stripe at top matching severity
 - "RACE CONTROL" header
 - Penalty text in large bold colored font
 - Steward notes below (if any)
 - Auto-fades after 8 seconds
-- Click anywhere on the overlay to dismiss early
+- Click anywhere to dismiss early
 
 **All overlay types:**
-- "INCIDENT UNDER INVESTIGATION" (amber) — when steward starts reviewing
-- "DRIVE-THROUGH PENALTY" (red) — with notes
-- "STOP & GO PENALTY" (red) — with notes
-- "TIME PENALTY — 10s" (red) — with seconds shown
-- "WARNING" (amber) — with notes
-- "RACE INCIDENT" (blue) — no penalty
-- "NO ACTION" (green) — cleared
-- "DISQUALIFIED" (dark red) — with notes
-- "PROTEST RECEIVED — STEWARDS NOTIFIED" (white) — protest acknowledgment
-- Race control messages (color auto-detected from content)
+| Overlay | Stripe Color | When shown |
+|---------|-------------|-----------|
+| INCIDENT UNDER INVESTIGATION | Amber | Steward starts review |
+| DRIVE-THROUGH PENALTY | Red | With notes |
+| STOP & GO PENALTY | Red | With notes |
+| TIME PENALTY — Xs | Red | Shows seconds |
+| WARNING | Amber | With notes |
+| RACE INCIDENT | Blue | No penalty |
+| NO ACTION | Green | Cleared |
+| DISQUALIFIED | Dark red | With notes |
+| PROTEST RECEIVED | White | Protest acknowledged |
+| Race control messages | Auto-detected | Yellow flag, track limits, custom |
 
 ---
 
-### 18. Incident Reporting (Protest)
+### 19. Incident Reporting (Protest)
 
 **What the driver does:** Presses F1 or clicks "Report Incident" in the agent window.
 
 **What happens:** The agent captures the exact `sessionTime`, `lap`, and `lapDist` and sends it to the server. The button grays out for 10 seconds ("Reported!") to prevent spam. The driver gets a confirmation overlay.
 
-**On the steward side:** A "PROTEST" incident appears in the feed at the exact moment the driver flagged. The steward can click Review to pull up telemetry and replay at that sessionTime.
+**On the steward side:** A "PROTEST" incident appears in the feed at the exact moment the driver flagged it. The steward can click Review to pull up telemetry and replay at that sessionTime.
 
 ---
 
 ## BROADCAST FEATURES
 
-### 19. Broadcast Dashboard
+### 20. Broadcast Dashboard
 
-**What it is:** A full-screen web dashboard at `http://45.55.216.21` designed for the broadcast crew to monitor the race.
+**What it is:** A full-screen web dashboard at `http://45.55.216.21` designed for the broadcast crew. Read-only — no steward controls.
 
-**Layout:** Six panels in a grid:
-1. **Live Standings** (main area) — full timing tower with position, car #, driver, laps, interval, gap, best/last lap, sector times, pit status
+**Layout — 6 panels:**
+1. **Live Standings** (main area) — full timing tower with position, car #, class (LMP2/GT3), driver, laps, interval, gap, best/last lap, sector times, pit status. Purple = overall best sector. Green = personal best.
 2. **Track Map** (top right) — circuit outline with live car position dots
 3. **Battle Tracker** (bottom right) — auto-detects cars within 1.5s of each other, sorted by gap, red highlight for gaps < 0.5s
 4. **Session Timer** (bottom left) — large remaining time countdown + elapsed time. Amber when < 10min remaining, red when < 2min
-5. **Race Feed** (bottom center) — live event ticker with every incident, penalty, protest, contact, blue flag, fastest lap, and RC message. Status bar at top shows active counts ("2 under review | 1 penalty pending | 3 contacts")
-6. **Live Telemetry** (bottom right) — mini telemetry cards for up to 6 drivers showing speed, gear, throttle/brake bars, current/best lap time
-
-**Read-only:** No controls exposed. The broadcast crew sees everything but can't affect anything.
+5. **Race Feed** (bottom center) — live event ticker with status bar showing active counts ("2 under review | 1 penalty pending | 3 contacts")
+6. **Live Telemetry** (bottom right area) — mini telemetry cards for up to 6 drivers showing speed, gear, throttle/brake bars, current/best lap time
 
 ---
 
-### 20. Battle Tracker
+### 21. Battle Tracker
 
 **What it does:** Automatically identifies close battles on track.
 
-**Detection:** Scans the standings for any pair of consecutive cars where the interval is ≤ 1.5 seconds.
+**Detection:** Scans the standings for any pair of consecutive cars where the interval is <= 1.5 seconds.
 
 **Display:** Each battle shows the two drivers, their positions, and the gap between them. Sorted by gap (closest first).
 
@@ -333,9 +360,9 @@ Detailed description of every feature in the system, how it works from the user'
 
 ---
 
-### 21. Race Feed (Broadcast)
+### 22. Race Feed (Broadcast)
 
-**What it shows:** A chronological feed of every race event, filtered to broadcast-relevant items:
+**What it shows:** A chronological feed of every race event:
 
 | Tag | Color | Event |
 |-----|-------|-------|
@@ -351,13 +378,13 @@ Detailed description of every feature in the system, how it works from the user'
 | JOIN | Green | Driver connected |
 | LEFT | Gray | Driver disconnected |
 
-**Status bar:** Persistent summary at top when counts are non-zero: "2 under review | 1 penalty pending | 3 contacts | 5 inc". Disappears when everything is clear.
+**Status bar:** Persistent summary when counts are non-zero: "2 under review | 1 penalty pending | 3 contacts | 5 inc". Disappears when everything is clear.
 
 ---
 
 ## SESSION RECORDING
 
-### 22. NDJSON Persistence
+### 23. NDJSON Persistence
 
 **What it does:** Records every telemetry frame, lap, incident, penalty, and event to a per-session NDJSON file on the server.
 
@@ -368,20 +395,56 @@ Detailed description of every feature in the system, how it works from the user'
 **What's recorded:**
 | Record type | When | Data |
 |-------------|------|------|
-| `session` | Session start | Track name, track ID, track length |
+| `session` | Session start | Track name, track ID |
 | `driver` | Driver joins | Driver ID, name, car |
-| `frame` | Every frame (20Hz per driver) | Full telemetry object |
-| `lap` | Lap completion | Lap number, time, fuel, valid, sectors |
+| `frame` | Every frame (20Hz) | Full telemetry object |
+| `lap` | Lap completion | Lap number, time, fuel, sectors |
 | `incident` | Incident count change | Driver, delta, total, sessionTime |
 | `penalty` | Penalty issued | Driver, type, seconds, notes |
 | `driver_left` | Driver disconnect | Driver ID, name |
-| `event` | Any event | Event type, data |
 | `contact` | Contact detected | Both drivers, lat-G values |
 | `blue_flag` | Blue flag violation | Both drivers, duration |
 | `penalty_served` | Penalty served | Driver, penalty type |
 | `rc_message` | Race control message | Message text, target |
 | `driver_protest` | Driver protest | Driver, reason, sessionTime |
 
-**Key abbreviations:** `t` = record type, `ts` = wall-clock timestamp, `d` = driverId, `st` = sessionTime, `ln` = lapNumber, `lt` = lapTime. Minimizes file size at 20Hz write rate.
+---
 
-**Use cases:** Post-race review, generating reports, historical statistics, replaying entire sessions, investigating incidents that were missed live.
+## MULTI-CLASS SUPPORT
+
+### 24. Multi-Class Racing
+
+**What it supports:** Multiple car classes racing simultaneously on the same track (e.g., GT3 + LMP2).
+
+**Standings:** Class column in both steward and broadcast standings tables. LMP2 shown in red, GT3 in amber. Overall position reflects actual race order (LMP2 at front due to faster lap times).
+
+**Blue flag detection:** Automatically detects when faster-class cars (LMP2) are held up by slower-class cars (GT3), triggering blue flag violation alerts.
+
+**Bot simulator:** 55-car multi-class field (35 GT3 + 20 LMP2) with realistic speed differentials (~10s/lap faster for LMP2), staggered connections, and realistic incident rates.
+
+---
+
+## TESTING TOOLS
+
+### 25. Multi-Class Bot Simulator (`agent/bots.py`)
+
+**What it does:** Spawns multiple mock drivers that stream realistic synthetic telemetry to the server for testing without iRacing.
+
+**Usage:**
+```
+python bots.py                    # 35 GT3 + 20 LMP2 (55 total)
+python bots.py --gt3 10 --lmp2 5  # smaller field for lighter testing
+```
+
+**Driver characteristics:**
+- **Skill** (0.68-0.97): Affects lap time consistency, corner speed, steering smoothness
+- **Aggression** (0.18-0.85): Affects incident frequency and type distribution
+- Clean drivers: ~1 incident per 20-30 minutes, mostly 1x
+- Aggressive drivers: ~1 incident per 5-10 minutes, more 2x/4x contacts
+
+**Multi-class behavior:**
+- LMP2: ~110-114s/lap, 8% faster corner speeds, higher top speed, more downforce, 7-speed gearbox
+- GT3: ~120-124s/lap, 8 different car models, 6-speed gearbox
+- LMP2 cars lap GT3 cars, triggering blue flag scenarios
+
+**Connection handling:** Bots connect 0.5s apart to avoid overwhelming the server. 30-second websocket timeout. Auto-reconnect on disconnect.

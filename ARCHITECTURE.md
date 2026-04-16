@@ -1,12 +1,12 @@
 # BPR Race Control — Technical Architecture
 
-This document describes the full system built for race control and stewarding of iRacing league events. It covers every component, how they connect, and what each piece does.
+This document describes the full system architecture, every component, how they connect, the complete message protocol, and data storage.
 
 ---
 
 ## System Overview
 
-Three applications share one websocket-based data pipeline:
+Four applications share one websocket-based data pipeline:
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌───────────────────┐
@@ -27,7 +27,7 @@ Three applications share one websocket-based data pipeline:
 
 **Data flows in two directions:**
 - **Forward:** Agent → Server → Viewers/Stewards (telemetry, standings, events)
-- **Reverse:** Steward → Server → Agent (penalties, investigation notices, race control messages)
+- **Reverse:** Steward → Server → Agent (penalties, investigation notices, race control messages, protest acknowledgments)
 
 ---
 
@@ -39,8 +39,9 @@ The agent runs on each driver's PC alongside iRacing. It reads telemetry from iR
 
 | File | Purpose |
 |------|---------|
-| `launcher.py` | Tkinter GUI — driver enters name, clicks Connect. Shows "Report Incident (F1)" button once connected. Displays penalty/RC message overlays. |
-| `main.py` | CLI entry point with `--mock` flag for synthetic data. Contains `MockIRacing` class that generates realistic Sebring telemetry. |
+| `launcher.py` | Tkinter GUI — driver enters name, clicks Connect. Shows "Report Incident (F1)" button once connected. Displays penalty/RC message overlays as transparent banners over iRacing. |
+| `main.py` | CLI entry point with `--mock` flag for synthetic Sebring telemetry. Contains `MockIRacing` class with incident simulation. |
+| `bots.py` | Multi-class bot simulator — spawns 35 GT3 + 20 LMP2 mock drivers with different skill/aggression profiles. Staggered connections. |
 | `capture.py` | Reads iRacing SDK: `read_frame()` (20Hz telemetry), `read_standings()` (2Hz leaderboard), `get_driver_info()`, `get_session_info()`. |
 | `protocol.py` | Message constructors: `hello_message()`, `frame_message()`, `standings_message()`. |
 | `config.py` | `SERVER_URL`, `SEND_RATE_HZ` (20), `CAPTURE_RATE_HZ` (60). |
@@ -51,56 +52,57 @@ Core: `lap`, `lapDist`, `lapTime`, `throttle`, `brake`, `speed`, `rpm`, `gear`, 
 
 Optional: tire temps/wear, brake temps, shock deflection, water/oil temp, oil pressure, voltage, fuel pressure, fuel use/hour, clutch, ABS, TC, air/track temp, wind, `incidents` (cumulative iRacing incident count), lap delta, last lap time.
 
-### What the agent receives
+### What the agent receives (reverse channel)
 
-| Message | What happens |
-|---------|-------------|
-| `server:penalty` | Transparent overlay banner appears over iRacing — color-coded by penalty type (red for DT/SG/time/DSQ, amber for warning, blue for race incident, green for no action). Fades after 8s. |
+| Message | What happens on driver's screen |
+|---------|-------------------------------|
+| `server:penalty` | Transparent overlay: penalty type in large text, color-coded stripe, steward notes. Fades after 8s. |
 | `server:underInvestigation` | Amber overlay: "INCIDENT UNDER INVESTIGATION". Fades after 10s. |
-| `server:message` | Race control message overlay (yellow flag, track limits, custom). Color auto-detected from message content. |
-| `server:protestAck` | Confirmation overlay: "PROTEST RECEIVED — STEWARDS NOTIFIED". |
+| `server:message` | Race control message overlay. Color auto-detected from content. Fades after 10s. |
+| `server:protestAck` | White overlay: "PROTEST RECEIVED — STEWARDS NOTIFIED". |
 
 ### Driver protest
 
-Driver presses **F1** (or clicks "Report Incident" button). Agent sends `agent:protest` with current `sessionTime`, `lap`, `lapDist`. Server broadcasts to all stewards. Agent gets acknowledgment overlay. 10-second cooldown prevents spam.
+Driver presses **F1** or clicks "Report Incident" button. Agent sends `agent:protest` with current `sessionTime`, `lap`, `lapDist`. Server broadcasts to all stewards. Agent gets acknowledgment overlay. 10-second cooldown prevents spam.
 
 ---
 
 ## 2. Server (`apps/server/src/`)
 
-Node.js + Express + ws. Single process on the droplet. Three websocket endpoints: `/ws/agent`, `/ws/viewer`, `/ws/steward`.
+Node.js + Express + ws. Single process on the droplet. Three websocket endpoints.
 
 ### Files
 
 | File | Purpose |
 |------|---------|
-| `main.js` | HTTP server, websocket routing, health check, Stream Deck API. |
-| `ws-handler.js` | Connection handlers for agents, viewers, and stewards. Agent socket registry for reverse messaging. Steward coordination (identity, incident locking). |
-| `session-store.js` | `SessionStore` class — single shared driver pool. Lap finalization, distance trace compression, raw-frame ring buffer, blue flag detection, contact detection, penalty serving verification. |
-| `broadcast.js` | `broadcastToViewers()`, `sendToViewer()` — message delivery to connected clients. |
-| `protocol.js` | `MSG` constants — shared vocabulary between agent, server, and clients. |
+| `main.js` | HTTP server, websocket routing (`/ws/agent`, `/ws/viewer`, `/ws/steward`), health check, Stream Deck API. |
+| `ws-handler.js` | Connection handlers for agents, viewers, and stewards. Agent socket registry (`agentSockets` Map) for reverse messaging. Steward coordination (identity, incident locking). Auto-detection broadcasting. |
+| `session-store.js` | `SessionStore` class — single shared driver pool. Lap finalization, distance trace compression, raw-frame ring buffer (10 min), blue flag detection, contact detection, penalty serving verification. |
+| `broadcast.js` | `broadcastToViewers()`, `sendToViewer()` — message delivery. |
+| `protocol.js` | `MSG` constants — shared vocabulary between agent, server, and all clients. |
 | `session-recorder.js` | `SessionRecorder` class — appends every frame, lap, incident, penalty, and event to per-session NDJSON files in `data/sessions/`. |
 | `profiles.js` | Per-driver best-lap profile persistence in `data/profiles/`. |
 | `race-plans.js` | Race plan save/load/delete persistence. |
 
 ### SessionStore internals
 
-**Raw-frame ring buffer:** Pre-allocated array of 2,400 slots per driver (120 seconds at 20Hz, ~500KB). Circular write on every frame. `getRawFrames(driverId, startTime, endTime)` queries by sessionTime range — this is what powers incident review telemetry.
+**Raw-frame ring buffer:** Pre-allocated array of 12,000 slots per driver (600 seconds / 10 minutes at 20Hz, ~2.5MB). Circular write on every frame. `getRawFrames(driverId, startTime, endTime)` queries by sessionTime range — powers incident review telemetry.
 
 **Blue flag detection:** Every frame, compares all connected driver pairs. If a lapping car (more laps completed) is within 5% track distance of a slower car for >8 seconds continuously, fires `blueFlag:violation`. 60-second cooldown per pair.
 
-**Contact detection:** Every frame, finds all drivers with |latG| > 1.8g. If two spiking drivers are within 2% track distance, fires `contact:detected`. 10-second cooldown per pair.
+**Contact detection:** Every frame, finds all drivers with |latG| > 2.5g. If two spiking drivers are within 0.5% track distance, fires `contact:detected`. 30-second cooldown per pair.
 
 **Incident tracking:** Watches each driver's `incidents` field (iRacing's cumulative `PlayerCarMyIncidentCount`). When it increments, fires `incident:flagged` with the delta, classified as `contact` (2x+) or `off-track` (1x).
 
-**Penalty serving verification:** When a drive-through or stop-go penalty is issued, tracks the driver's `onPitRoad` and `speed`. Drive-through is served when the driver enters and exits pit road. Stop-go is served when the driver enters pit and stops (speed < 1), then exits. Fires `penalty:served`.
+**Penalty serving verification:** When a drive-through or stop-go penalty is issued via `addPendingPenalty()`, tracks the driver's `onPitRoad` and `speed`. Drive-through served when driver enters and exits pit road. Stop-go served when driver enters pit, stops (speed < 1), then exits. Fires `penalty:served`.
 
 ### Multi-steward coordination
 
 - Stewards identify via `steward:hello` with name and role (MAIN/SUPPORT).
-- `steward:lockIncident` prevents two stewards reviewing the same incident. If already locked, the requesting steward gets a denial with the lock holder's name.
+- `steward:lockIncident` prevents two stewards reviewing the same incident. Denial sent if already locked.
 - `steward:unlockIncident` releases the lock. Locks auto-release when a steward disconnects.
-- `steward:list` broadcasts the current steward roster and lock state to all stewards.
+- `steward:list` broadcasts current steward roster and lock state.
+- `broadcastToStewards()` helper sends to all steward websockets.
 
 ### Session recording
 
@@ -113,10 +115,9 @@ Node.js + Express + ws. Single process on the droplet. Three websocket endpoints
 {"t":"lap","ts":1713045720000,"d":"driver-agent-1","ln":5,"lt":121.45,...}
 {"t":"incident","ts":1713045800000,"d":"driver-agent-1","delta":2,"total":4}
 {"t":"penalty","ts":1713045900000,"d":"driver-agent-1","type":"drive-through"}
-{"t":"event","ts":1713046000000,"type":"driver_left","data":{...}}
 ```
 
-Recording starts automatically when the first agent connects with track info. Keys are abbreviated (`t`, `ts`, `d`, `st`, `ln`, `lt`) to minimize disk usage at 20Hz write rate.
+Recording starts automatically when the first agent connects with track info. Keys abbreviated (`t`, `ts`, `d`, `st`, `ln`, `lt`) to minimize disk usage at 20Hz write rate.
 
 ---
 
@@ -126,116 +127,97 @@ Electron + React + Vite desktop application. Runs on the steward's PC alongside 
 
 ### Architecture
 
-- **Electron main process** (`electron/main.js`): Window management, IPC handlers for iRacing SDK replay control (stubbed, ready for `node-irsdk-2023`).
+- **Electron main process** (`electron/main.js`): Window management, IPC handlers for iRacing SDK replay control (stubbed for `node-irsdk-2023`).
 - **Preload bridge** (`electron/preload.js`): Exposes `window.irsdk` API — `replayJump()`, `replaySpeed()`, `replayCamera()`, `getStatus()`.
 - **React renderer** (`src/`): All UI components.
 
 ### Layout
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Header: BPR Race Control — track, drivers, connection   │
-├────────────┬─────────────────────────────────────────────┤
-│            │                                             │
-│  Driver    │  [Telemetry] [Standings]  ← view tabs       │
-│  List      │                                             │
-│            │  Telemetry: uPlot charts (throttle, brake,  │
-│  (click    │  speed, steer) for involved drivers         │
-│  to select │                                             │
-│  for       │  ┌─────────────────┐ ┌──────────────────┐  │
-│  incidents)│  │ Replay Controls │ │ Track Map +      │  │
-│            │  │ Play/Pause/LIVE │ │ Incident Heatmap │  │
-│            │  │ Speed ¼-4x     │ │                  │  │
-│            │  │ Jump ±5s/±10s  │ │                  │  │
-│────────────│  │ Driver ◀ ▶     │ └──────────────────┘  │
-│            │  │ Camera (7 views)│                        │
-│  Incident  │  └─────────────────┘                        │
-│  Panel     │                                             │
-│  (flag,    │  Penalty Panel (when reviewing):            │
-│  filter,   │  No Action / Race Incident / Warning /      │
-│  review)   │  Drive-Thru / Stop-Go / Time / DSQ          │
-│            │                                             │
-│────────────│  ┌──────────────────────┐ ┌──────────────┐  │
-│  Race      │  │ Driver Summary Table │ │ Report       │  │
-│  Control   │  │ (contacts, off-track,│ │ Export       │  │
-│  Messages  │  │  blue flags, inc pts,│ │ (CSV/JSON)   │  │
-│  (templates│  │  penalties per driver)│ │              │  │
-│  + custom) │  └──────────────────────┘ └──────────────┘  │
-└────────────┴─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Header: BPR Race Control — track name, driver count, connection │
+├──────────────┬───────────────────────────────────────────────────┤
+│              │                                                   │
+│  Driver      │  [Telemetry] [Standings] [Driver Summary]         │
+│  Dropdown    │                                                   │
+│  (select     │  TELEMETRY TAB:                                   │
+│  for         │  ┌───────────────────────────────────────────┐    │
+│  incidents)  │  │ uPlot: Throttle, Brake, Speed, Steer     │    │
+│              │  │ Synced cursor, dynamic height, no scroll  │    │
+│──────────────│  └───────────────────────────────────────────┘    │
+│  Race        │  Penalty Panel (when reviewing)                   │
+│  Control     │                                                   │
+│  Messages    │  STANDINGS TAB:                                   │
+│  (templates  │  Track Map + Incident Heatmap (side by side)      │
+│  + custom)   │  Full standings table with class column           │
+│              │                                                   │
+│──────────────│  DRIVER SUMMARY TAB:                              │
+│              │  Per-driver stats table + Report Export            │
+│  Incident    │                                                   │
+│  Feed        │──────────────────────────────────────────────────│
+│  (filtered,  │  Replay Controls (always visible):                │
+│  scrollable, │  Play/Pause │ LIVE │ Speed │ Jump │ Driver │ Cam  │
+│  oldest      │                                                   │
+│  first)      │                                                   │
+└──────────────┴───────────────────────────────────────────────────┘
 ```
 
-### Components (11)
+### Components (13)
 
 | Component | What it does |
 |-----------|-------------|
-| `DriverList` | Shows all connected drivers. Click to select for incident flagging. Selected drivers highlighted purple. |
-| `IncidentPanel` | Flag incidents at current sessionTime. Filter toggles: Contact (2x+), Off-track (1x), Blue Flag, Driver Report, Manual. Shows incident log with type tags (CONTACT, 1x, BLUE FLAG, PROTEST). Click "Review" to load telemetry + notify drivers. |
-| `TelemetryOverlay` | 4 stacked uPlot charts (throttle, brake, speed, steer) showing raw frames from the server's ring buffer for involved drivers. Shared synced cursor across all charts. One color per driver (purple, green, amber, blue, etc.). |
-| `PenaltyPanel` | 7 penalty buttons color-coded by severity. Time input appears for time penalties. Steward notes textarea. Confirm sends `notify:penalty` to server, which forwards to each involved driver's agent. |
-| `ReplayControls` | Play/Pause, LIVE button (jump to live replay), Speed (¼x-4x), Jump (±5s/±10s), Driver nav (◀/▶ with name display), Camera (Cockpit, Chase, Far Chase, Front, Rear, Chopper, Blimp). All wired through IPC to `window.irsdk`. |
-| `LiveStandings` | Full race standings table. Position, car #, driver, laps, interval, gap, best/last lap, S1/S2/S3 sectors (purple = overall best, green = PB), iRating, pit status. Click a row to switch iRacing camera to that car. |
-| `RaceControlMessages` | Template buttons (Yellow Flag, Track Limits) + custom message input. Send to all drivers or single driver. **Confirmation dialog** prevents accidental sends — shows exact message and target before broadcasting. |
-| `DriverSummaryPanel` | Table: driver name, laps, contacts, off-tracks, blue flags, total incident points, penalty count. Color-coded by severity. |
-| `TrackMap` | Canvas rendering of track shape with live car position dots updated via `requestAnimationFrame`. Pit road indicator (amber ring). Color-coded legend. |
-| `IncidentHeatmap` | Track outline colored by incident density. Brighter = more incidents. Contact dots red, blue flags blue, off-tracks amber. |
-| `ReportExport` | Export CSV and JSON post-race reports. Includes all incidents, penalties, steward notes, and driver summary stats. Downloads to steward's machine. |
+| `DriverList.jsx` | (Legacy) Full driver list — replaced by inline dropdown in App.jsx |
+| `IncidentPanel.jsx` | Incident creation, 5-category filtering, chronological feed, review workflow |
+| `TelemetryOverlay.jsx` | 4 stacked uPlot charts with synced cursor, dynamic height, driver color legend |
+| `PenaltyPanel.jsx` | 7 penalty buttons, time input, notes, confirm/cancel |
+| `ReplayControls.jsx` | Play/pause, LIVE, speed (1/4-4x), jump (+-5/10s), driver nav, 7 camera views |
+| `LiveStandings.jsx` | Full standings with class column, click-to-camera, color-coded sectors |
+| `RaceControlMessages.jsx` | Templates + custom input, target selector (all/single), confirmation dialog |
+| `DriverSummaryPanel.jsx` | Per-driver stats table (contacts, off-tracks, blue flags, inc pts, penalties) |
+| `TrackMap.jsx` | Canvas track with live car dots, pit indicator, driver legend |
+| `IncidentHeatmap.jsx` | Track colored by incident density, type-colored dots |
+| `ReportExport.jsx` | CSV and JSON post-race report download |
+| `LiveStandings.jsx` | Race standings with class, sectors, click-to-camera |
 
 ### Keyboard shortcuts
 
 | Key | Action |
 |-----|--------|
 | Space | Play/pause replay |
-| ← / → | Jump -5s / +5s |
+| Left/Right | Jump -5s / +5s |
 | [ / ] | Previous / next driver |
-| 1-6 | Camera views (cockpit, chase, far chase, front, chopper, blimp) |
-| Tab | Toggle Telemetry / Standings view |
+| 1-6 | Camera views |
+| Tab | Cycle tabs (Telemetry → Standings → Driver Summary) |
 | Escape | Cancel incident review |
 
-### Incident workflow
+### Build & Distribution
 
-1. Steward selects involved drivers in the driver list
-2. Clicks "Flag" → incident created at current sessionTime
-3. Auto-detected incidents (contact, blue flag, 1x, driver protest) appear automatically tagged
-4. Steward clicks "Review" on an incident:
-   - Server sends raw frames from the ring buffer (`request:incidentWindow`)
-   - Telemetry overlay populates with involved drivers' data
-   - iRacing replay jumps to that sessionTime (via IPC)
-   - Involved drivers get "INCIDENT UNDER INVESTIGATION" overlay
-5. Steward selects penalty type, adds notes, clicks "Confirm Decision"
-6. `notify:penalty` sent to server → forwarded to each driver's agent → overlay appears on driver's screen
-7. Penalty serving tracked automatically (drive-through/stop-go)
+- **Dev:** `npm run dev` — Vite HMR + Electron
+- **Windows build:** `npm run pack` — outputs to `C:/temp/bpr-steward-build/win-unpacked/`
+- **Mac:** Clone repo, `npm run dev` (or `npm run pack:mac` on a Mac)
+- Portable .exe — no installer needed, just run `BPR Race Control.exe`
 
 ---
 
 ## 4. Broadcast Dashboard (`apps/web/`)
 
-Vite + React web app served at `http://45.55.216.21`. Connects to `/ws/viewer`. Read-only — no steward controls.
+Vite + React web app served at `http://45.55.216.21`. Connects to `/ws/viewer`. Read-only.
 
 ### Layout
 
 ```
 ┌───────────────────────────────────────────┬─────────────┐
 │  LIVE STANDINGS                           │  TRACK MAP  │
-│  (position, #, driver, laps, interval,    │  (car dots) │
-│   gap, best, last, S1, S2, S3, pit)       │             │
-│  Purple = overall best sector             ├─────────────┤
-│  Green = personal best                    │  BATTLES    │
-│                                           │  (cars < 1.5s│
-│                                           │   apart)    │
+│  (P, #, Class, Driver, Laps, Int, Gap,    │  (car dots) │
+│   Best, Last, S1, S2, S3, Pit)            │             │
+│  Class: LMP2 (red) / GT3 (amber)         ├─────────────┤
+│  Purple = overall best sector             │  BATTLES    │
+│  Green = personal best                    │  (<1.5s gap)│
 ├──────────┬──────────────────┬─────────────┼─────────────┘
 │  SESSION │  RACE FEED       │  LIVE TELEM │
-│  TIMER   │  ┌──────────────┐│  (speed,    │
-│          │  │ status bar:  ││  gear, T/B  │
-│  Remain  │  │ 2 under rev  ││  bars for   │
-│  Elapsed │  │ 1 pen pending││  top 6      │
-│          │  ├──────────────┤│  drivers)   │
-│          │  │ INC  +2x     ││             │
-│          │  │ CONTACT A+B  ││             │
-│          │  │ PENALTY DT   ││             │
-│          │  │ SERVED DT    ││             │
-│          │  │ PROTEST filed││             │
-│          │  │ FAST new best││             │
-│          │  └──────────────┘│             │
+│  TIMER   │  Status bar:     │  (6 drivers │
+│  Remain  │  "2 under rev"   │  speed,gear │
+│  Elapsed │  Event ticker    │  T/B bars)  │
 └──────────┴──────────────────┴─────────────┘
 ```
 
@@ -243,26 +225,26 @@ Vite + React web app served at `http://45.55.216.21`. Connects to `/ws/viewer`. 
 
 | Component | What it does |
 |-----------|-------------|
-| `BroadcastStandings` | F1-style timing tower. Color-coded sectors, pit badges, overall best highlighting. |
-| `BattleTracker` | Auto-detects cars within 1.5s. Sorted by gap. Red highlight for gaps < 0.5s ("hot" battles). |
-| `SessionTimer` | Large countdown from `sessionTimeRemain`. Amber when < 10min, red when < 2min. Shows elapsed time. |
-| `IncidentFeed` | Live event feed with type tags (INC, CONTACT, BLUE, PENALTY, SERVED, INV, PROTEST, RC, FAST, JOIN, LEFT). Status bar shows active counts: "2 under review | 1 penalty pending | 3 contacts". |
-| `TelemetrySnippet` | Mini telemetry cards for up to 6 drivers — speed, gear, throttle/brake bars, current/best lap time. |
+| `BroadcastStandings.jsx` | Compact timing tower with class column, color-coded sectors |
+| `BattleTracker.jsx` | Auto-detects cars within 1.5s, red highlight for <0.5s |
+| `SessionTimer.jsx` | Large countdown, amber <10min, red <2min |
+| `IncidentFeed.jsx` | Event ticker with 11 tag types, persistent status bar |
+| `TelemetrySnippet.jsx` | Mini telemetry cards for up to 6 drivers |
 
-The existing `TrackMap` component from `components/track/` is reused for live car positions.
+Reuses `TrackMap.jsx` from `components/track/` for live car positions.
 
 ---
 
 ## 5. Message Protocol (`protocol.js`)
 
-All websocket messages use `{ type, payload }` format. Complete list:
+All websocket messages use `{ type, payload }` format.
 
 ### Agent → Server
 | Type | Payload | When |
 |------|---------|------|
 | `agent:hello` | `{ driverName, car, trackId, trackName, trackLength }` | On connect |
 | `agent:frame` | Full telemetry object (20+ channels) | 20Hz |
-| `agent:standings` | Array of driver standings | 2Hz |
+| `agent:standings` | Array of driver standings with carClass | 2Hz |
 | `agent:sessionInfo` | `{ trackName, trackId }` | Session change |
 | `agent:protest` | `{ reason }` | Driver presses F1 |
 
@@ -316,12 +298,14 @@ All websocket messages use `{ type, payload }` format. Complete list:
 
 ### In-memory (SessionStore)
 - Driver registry with connection state, lap history, stint tracking
-- Per-driver raw-frame ring buffer (120s at 20Hz = 2,400 frames)
+- Per-driver raw-frame ring buffer (10 min at 20Hz = 12,000 frames per driver)
 - Per-driver incident count tracking
 - Blue flag proximity pairs + cooldowns
-- Contact detection cooldowns
+- Contact detection cooldowns (30s per pair)
 - Pending penalty serving queue
 - Event log (last 200 events)
+- Agent websocket registry (`agentSockets` Map) for reverse messaging
+- Steward registry + incident lock state
 
 ### On disk
 - `data/sessions/*.ndjson` — full session recordings (every frame from every driver)
@@ -334,41 +318,105 @@ All websocket messages use `{ type, payload }` format. Complete list:
 | Component | Location |
 |-----------|---------|
 | Server | DigitalOcean droplet `45.55.216.21` |
-| Web app | Served by same droplet via nginx |
-| Agent | Driver's PC (PyInstaller .exe) |
-| Steward app | Steward's PC (Electron) |
+| Broadcast dashboard | Served by same droplet via nginx (built Vite output) |
+| Agent | Driver's PC (PyInstaller .exe or `python main.py`) |
+| Steward app | Steward's PC (Electron — portable .exe or `npm run dev`) |
 | Deploy | `deploy.sh` — Node 20, nginx, pm2, ufw |
 
 ### Endpoints
 | URL | Purpose |
 |-----|---------|
 | `ws://45.55.216.21/ws/agent` | Agent telemetry stream |
-| `ws://45.55.216.21/ws/viewer` | Broadcast dashboard |
-| `ws://45.55.216.21/ws/steward` | Steward app |
+| `ws://45.55.216.21/ws/viewer` | Broadcast dashboard websocket |
+| `ws://45.55.216.21/ws/steward` | Steward app websocket |
 | `http://45.55.216.21/health` | Health check |
 | `http://45.55.216.21/` | Broadcast web dashboard |
 
 ---
 
-## 8. Key Design Decisions
+## 8. Auto-Detection Thresholds
 
-- **`sessionTime` is the universal time key.** Every frame, incident, penalty, and replay scrub point is anchored to iRacing's session clock. Cross-car sync and telemetry-to-replay sync are free.
-- **Single driver pool.** No team scoping. All drivers in one `SessionStore`. Every viewer and steward sees every driver.
-- **Inline styles only.** No Tailwind/CSS modules in the steward app. Consistent with the project's styling conventions.
-- **Ring buffer, not full history.** 120 seconds of raw frames per driver in memory. Enough for incident review. Full history goes to disk via session recording.
-- **Steward app is Electron.** Browser can't access iRacing's SDK. Desktop app can control replay via `BroadcastMsg`.
-- **IPC per concern.** `irsdk:replay` for replay commands, `irsdk:session` for session info, `irsdk:status` for connection status.
-- **Auto-detection supplements manual.** Server auto-flags incidents (contact, blue flag, incident count), but stewards can also flag manually. Both appear in the same incident feed.
+| Detection | Parameter | Value | Purpose |
+|-----------|-----------|-------|---------|
+| Blue flag proximity | `BLUE_FLAG_PROXIMITY` | 5% track distance | How close cars must be |
+| Blue flag duration | `BLUE_FLAG_VIOLATION_SECONDS` | 8 seconds | How long before flagging |
+| Blue flag cooldown | Per-pair cooldown | 60 seconds | Prevent re-flagging |
+| Contact lat-G | `CONTACT_LAT_G_THRESHOLD` | 2.5g | Minimum G-force spike |
+| Contact proximity | `CONTACT_PROXIMITY` | 0.5% track distance | How close for contact |
+| Contact cooldown | `CONTACT_COOLDOWN_SECONDS` | 30 seconds | Prevent re-detection |
 
 ---
 
-## 9. What's Stubbed (Ready for Integration)
+## 9. Key Design Decisions
 
-The iRacing SDK integration in the Electron main process is stubbed. The IPC bridge is wired, the renderer calls the right methods, and the handlers log to console. When `node-irsdk-2023` is added:
+- **`sessionTime` is the universal time key.** Every frame, incident, penalty, and replay scrub point is anchored to iRacing's session clock. Cross-car sync and telemetry-to-replay sync are free.
+- **Single driver pool.** No team scoping. All drivers in one `SessionStore`. Every viewer and steward sees every driver.
+- **Inline styles only.** No Tailwind/CSS modules in the steward app.
+- **10-minute ring buffer, not full history.** Raw frames in memory for incident review. Full history goes to disk via session recording.
+- **Steward app is Electron.** Browser can't access iRacing's SDK. Desktop app can control replay via `BroadcastMsg`.
+- **IPC per concern.** `irsdk:replay` for replay commands, `irsdk:session` for session info, `irsdk:status` for connection status.
+- **Auto-detection supplements manual.** Server auto-flags incidents (contact, blue flag, incident count), but stewards can also flag manually. Both appear in the same incident feed.
+- **Broadcast dashboard is read-only.** Shares the same websocket events but exposes no controls.
+- **Multi-class aware.** Standings include `carClass` field. LMP2/GT3 displayed with distinct colors.
 
-1. `irsdk:replay:jump` → `BroadcastMsg(ReplaySearchSessionTime, sessionTime)`
-2. `irsdk:replay:speed` → `BroadcastMsg(ReplaySetPlaySpeed, speed)`
-3. `irsdk:replay:camera` → `BroadcastMsg(CamSwitchNum, carIdx, camGroupNum)` (resolve camera name to group number via `CameraInfo.Groups[]`)
-4. `irsdk:status` → return real connection state from the SDK
+---
 
-The `-1` sentinel value on `replayJump` means "go to live" — maps to jumping to the end of the replay buffer.
+## 10. iRacing SDK Integration (Stubbed)
+
+The Electron main process IPC handlers are wired but stubbed. When `node-irsdk-2023` is added:
+
+| IPC Channel | Maps to | iRacing API |
+|-------------|---------|------------|
+| `irsdk:replay:jump` | `BroadcastMsg(ReplaySearchSessionTime, t)` | Jump to sessionTime |
+| `irsdk:replay:jump(-1)` | Jump to end of replay buffer | Go to live |
+| `irsdk:replay:speed` | `BroadcastMsg(ReplaySetPlaySpeed, speed)` | Set playback speed |
+| `irsdk:replay:camera` | `BroadcastMsg(CamSwitchNum, carIdx, camGroup)` | Switch camera view |
+| `irsdk:status` | Query SDK connection state | Connection check |
+
+Camera names (`cockpit`, `chase`, `far-chase`, `front`, `rear`, `chopper`, `blimp`) will be resolved to iRacing's `camGroupNum` values via `CameraInfo.Groups[]` at runtime.
+
+---
+
+## 11. Repo Structure
+
+```
+agent/
+  launcher.py           Tkinter GUI agent
+  main.py               CLI agent + MockIRacing
+  bots.py               55-car multi-class bot simulator
+  capture.py            iRacing SDK frame reader
+  protocol.py           Message constructors
+  config.py             SERVER_URL, rates
+
+apps/server/src/
+  main.js               HTTP + WebSocket server
+  ws-handler.js          Agent/viewer/steward handlers
+  session-store.js      SessionStore + detection + ring buffer
+  broadcast.js          Message broadcasting
+  protocol.js           MSG constants
+  session-recorder.js   NDJSON persistence
+  profiles.js           Driver profile persistence
+  race-plans.js         Race plan persistence
+
+apps/steward/
+  electron/main.js      Electron main process + IPC
+  electron/preload.js   IPC bridge (window.irsdk)
+  src/App.jsx           Root component + state management
+  src/components/       13 UI components
+  src/lib/ws-client.js  Steward WebSocket client
+  vite.config.js        Renderer build config
+  package.json          Build scripts (dev/pack/dist)
+
+apps/web/
+  src/pages/            BroadcastDashboard
+  src/components/broadcast/  5 broadcast components
+  src/components/track/      TrackMap
+  src/components/live/       Reusable telemetry components
+  src/context/          SessionContext, TelemetryContext, ThemeContext
+  src/hooks/            useAnimationFrame, useFullscreen, etc.
+  src/lib/              ws-client, telemetry-buffer, utils
+
+CLAUDE.md               Project context and build order
+ARCHITECTURE.md          This file
+FEATURES.md              Detailed feature guide (25 features)
+```

@@ -7,3 +7,10 @@ __pycache__/
 data/sessions/
 data/profiles/
 .claude/
+
+# SimHub plugin build output
+plugins/simhub/BPRRaceControl/bin/
+plugins/simhub/BPRRaceControl/obj/
+plugins/simhub/BPRRaceControl/.vs/
+*.user
+*.suo
