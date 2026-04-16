@@ -87,6 +87,39 @@ namespace BPRRaceControl
                 Margin = new Thickness(0, 0, 0, 12),
             });
 
+            // ── Check for Updates button ─────────────────────────────
+            var _checkUpdateButton = new Button
+            {
+                Content = "Check for Updates",
+                Background = Brush("#1a1a1a"),
+                Foreground = Brush("#888888"),
+                BorderBrush = Brush("#2a2a2a"),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(12, 6, 12, 6),
+                FontSize = 10,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 16),
+            };
+            _checkUpdateButton.Click += (s, e) =>
+            {
+                _checkUpdateButton.Content = "Checking...";
+                _checkUpdateButton.IsEnabled = false;
+                _updater.OnUpdateCheckComplete += () =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _checkUpdateButton.Content = _updater.UpdateAvailable
+                            ? "Update found!"
+                            : "Up to date";
+                        _checkUpdateButton.IsEnabled = true;
+                        RefreshUpdateBanner();
+                    }));
+                };
+                _updater.CheckForUpdateAsync();
+            };
+            root.Children.Add(_checkUpdateButton);
+
             // ── Update banner (hidden by default) ────────────────────
             _updateBanner = new Border
             {
