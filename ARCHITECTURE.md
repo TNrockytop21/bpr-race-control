@@ -12,10 +12,10 @@ Four applications share one websocket-based data pipeline:
 ┌─────────────┐     ┌──────────────────┐     ┌───────────────────┐
 │  Driver PC  │     │  DigitalOcean    │     │  Steward PC       │
 │             │     │  Droplet         │     │                   │
-│  Agent      │────▶│  Server          │◀───▶│  Electron App     │
-│  (Python)   │     │  (Node.js)       │     │  (React + iRSDK)  │
-│             │◀────│                  │     │                   │
-│  Overlay    │     │                  │────▶│                   │
+│  SimHub     │────▶│  Server          │◀───▶│  Electron App     │
+│  Plugin     │     │  (Node.js)       │     │  (React + iRSDK)  │
+│  (C# .dll)  │◀────│                  │     │                   │
+│  + Overlays │     │                  │────▶│  irsdk-bridge.exe │
 └─────────────┘     │                  │     └───────────────────┘
                     │                  │
                     │                  │────▶┌───────────────────┐
@@ -26,44 +26,97 @@ Four applications share one websocket-based data pipeline:
 ```
 
 **Data flows in two directions:**
-- **Forward:** Agent → Server → Viewers/Stewards (telemetry, standings, events)
-- **Reverse:** Steward → Server → Agent (penalties, investigation notices, race control messages, protest acknowledgments)
+- **Forward:** SimHub Plugin → Server → Viewers/Stewards (telemetry, standings, events)
+- **Reverse:** Steward → Server → SimHub Plugin (penalties, investigation notices, race control messages, protest acknowledgments)
 
 ---
 
-## 1. Agent (`agent/`)
+## 1. SimHub Plugin (`plugins/simhub/BPRRaceControl/`)
 
-The agent runs on each driver's PC alongside iRacing. It reads telemetry from iRacing's shared memory via `pyirsdk` and streams it over a websocket to the server.
+The primary driver-side agent. A C# SimHub plugin (.NET Framework 4.8) that runs inside SimHub on each driver's PC. Reads iRacing telemetry via SimHub's data pipeline and streams it over websocket to the server. Replaces the standalone Python agent — drivers just drop a DLL into their SimHub folder (or use the installer).
 
 ### Files
 
 | File | Purpose |
 |------|---------|
-| `launcher.py` | Tkinter GUI — driver enters name, clicks Connect. Shows "Report Incident (F1)" button once connected. Displays penalty/RC message overlays as transparent banners over iRacing. |
-| `main.py` | CLI entry point with `--mock` flag for synthetic Sebring telemetry. Contains `MockIRacing` class with incident simulation. |
-| `bots.py` | Multi-class bot simulator — spawns 35 GT3 + 20 LMP2 mock drivers with different skill/aggression profiles. Staggered connections. |
-| `capture.py` | Reads iRacing SDK: `read_frame()` (20Hz telemetry), `read_standings()` (2Hz leaderboard), `get_driver_info()`, `get_session_info()`. |
-| `protocol.py` | Message constructors: `hello_message()`, `frame_message()`, `standings_message()`. |
-| `config.py` | `SERVER_URL`, `SEND_RATE_HZ` (20), `CAPTURE_RATE_HZ` (60). |
+| `BPRRaceControlPlugin.cs` | Main plugin class (IPlugin + IDataPlugin + IWPFSettingsV2). 60Hz DataUpdate throttled to 20Hz send rate. State machine: Idle → WaitingForSession → HelloSent → Streaming. |
+| `WebSocketClient.cs` | Background-thread websocket manager. ConcurrentQueue for sends, auto-reconnect with 3s backoff, receive loop for server messages. |
+| `TelemetryFrameBuilder.cs` | Maps SimHub `GameRawData.Telemetry.*` properties to JSON frame payload. Radians-to-degrees conversion for steering. Optional fields omitted when null. |
+| `StandingsBuilder.cs` | Reads CarIdx* telemetry arrays + SimHub Opponents collection for driver names/car/iRating. Outputs standings array matching Python agent format. |
+| `NotificationOverlay.cs` | WPF popup windows for penalty/investigation/RC message overlays. Top-center banner, 92% opacity, color-coded, 8s auto-fade with click-to-dismiss. |
+| `PluginUpdater.cs` | Auto-update: checks GitHub releases API on startup, compares assembly version, downloads new DLL, silent batch+VBS swap, restarts SimHub. |
+| `SettingsControl.cs` | WPF settings panel: server URL, auto-connect, connect/disconnect, Report Incident button, Check for Updates button, update banner. |
+| `PluginSettings.cs` | Persisted settings model (ServerUrl, AutoConnect). |
+| `Protocol.cs` | Message type constants + JSON envelope helpers matching server protocol. |
+| `AssemblyInfo.cs` | Assembly version tracking for auto-updater. |
 
-### What the agent sends (every frame at 20Hz)
+### Threading model
 
-Core: `lap`, `lapDist`, `lapTime`, `throttle`, `brake`, `speed`, `rpm`, `gear`, `steer`, `latG`, `lonG`, `fuel`, `onPitRoad`, `position`, `sessionTime`, `sessionTimeRemain`.
+```
+SimHub Thread (60Hz)              Background Thread
+  DataUpdate()                      WebSocket Send Loop
+    → skip 2/3 ticks (20Hz)          → dequeue from ConcurrentQueue
+    → TelemetryFrameBuilder           → SendAsync to server
+    → JSON serialize                  → 1ms yield when empty
+    → Enqueue (O(1))
+                                    WebSocket Receive Loop
+  Every 10th send (2Hz):              → ReceiveAsync
+    → StandingsBuilder                → parse JSON
+    → Enqueue standings               → Dispatcher.Invoke for WPF overlay
+```
 
-Optional: tire temps/wear, brake temps, shock deflection, water/oil temp, oil pressure, voltage, fuel pressure, fuel use/hour, clutch, ABS, TC, air/track temp, wind, `incidents` (cumulative iRacing incident count), lap delta, last lap time.
+### Auto-update system
 
-### What the agent receives (reverse channel)
+1. On Init(), `PluginUpdater.CheckForUpdateAsync()` hits `https://api.github.com/repos/TNrockytop21/bpr-race-control/releases/latest`
+2. Compares `tag_name` (e.g. `v1.0.4`) against `Assembly.GetExecutingAssembly().GetName().Version`
+3. If newer: green banner in settings panel + "Check for Updates" button anytime
+4. On click "Install Update": downloads DLL to temp, writes silent VBS+batch updater, closes SimHub, swaps DLL, restarts SimHub — no console window visible
+
+### Installation
+
+- **Installer:** `installer/output/BPR-RaceControl-SimHub-Plugin-Setup.exe` — auto-detects SimHub path, copies DLL
+- **Manual:** Copy `BPRRaceControl.dll` to `C:\Program Files (x86)\SimHub\`, restart SimHub
+
+### What the plugin sends
+
+Same protocol as the Python agent — fully compatible, no server changes needed.
+
+Core (20Hz): `lap`, `lapDist`, `lapTime`, `throttle`, `brake`, `speed`, `rpm`, `gear`, `steer`, `latG`, `lonG`, `fuel`, `onPitRoad`, `position`, `sessionTime`, `sessionTimeRemain`.
+
+Optional: water/oil temp, oil pressure, voltage, fuel pressure, fuel use/hour, clutch, ABS, TC, air/track temp, wind, `incidents`, lap delta, last lap time.
+
+### What the plugin receives (reverse channel)
 
 | Message | What happens on driver's screen |
 |---------|-------------------------------|
-| `server:penalty` | Transparent overlay: penalty type in large text, color-coded stripe, steward notes. Fades after 8s. |
+| `server:penalty` | WPF overlay: penalty type in large text, color-coded stripe, steward notes. Fades after 8s. |
 | `server:underInvestigation` | Amber overlay: "INCIDENT UNDER INVESTIGATION". Fades after 10s. |
-| `server:message` | Race control message overlay. Color auto-detected from content. Fades after 10s. |
-| `server:protestAck` | White overlay: "PROTEST RECEIVED — STEWARDS NOTIFIED". |
+| `server:message` | Race control message overlay. Color auto-detected from content. |
+| `server:protestAck` | Green overlay: "PROTEST RECEIVED". |
 
-### Driver protest
+### Exposed SimHub properties
 
-Driver presses **F1** or clicks "Report Incident" button. Agent sends `agent:protest` with current `sessionTime`, `lap`, `lapDist`. Server broadcasts to all stewards. Agent gets acknowledgment overlay. 10-second cooldown prevents spam.
+The plugin exposes properties readable by SimHub's Dash Studio overlay system:
+- `BPRRaceControl.Connected` — websocket connection state
+- `BPRRaceControl.LastPenalty` — most recent penalty type
+- `BPRRaceControl.UnderInvestigation` — investigation flag
+- `BPRRaceControl.LastRCMessage` — last race control message
+- `BPRRaceControl.ProtestCooldown` — protest button cooldown state
+
+---
+
+## 1b. Legacy Python Agent (`agent/`) — Deprecated
+
+The original standalone Python agent. Still functional but superseded by the SimHub plugin. Retained for bot simulation and as a fallback.
+
+| File | Purpose |
+|------|---------|
+| `launcher.py` | Tkinter GUI — driver enters name, clicks Connect. Penalty overlays via Tkinter. |
+| `main.py` | CLI entry point with `--mock` flag for synthetic telemetry. |
+| `bots.py` | Multi-class bot simulator — 35 GT3 + 20 LMP2 mock drivers. |
+| `capture.py` | Reads iRacing SDK via pyirsdk. |
+| `protocol.py` | Message constructors. |
+| `config.py` | SERVER_URL, send/capture rates. |
 
 ---
 
@@ -127,8 +180,9 @@ Electron + React + Vite desktop application. Runs on the steward's PC alongside 
 
 ### Architecture
 
-- **Electron main process** (`electron/main.js`): Window management, IPC handlers for iRacing SDK replay control (stubbed for `node-irsdk-2023`).
-- **Preload bridge** (`electron/preload.js`): Exposes `window.irsdk` API — `replayJump()`, `replaySpeed()`, `replayCamera()`, `getStatus()`.
+- **Electron main process** (`electron/main.js`): Window management, IPC handlers for iRacing SDK replay control via `irsdk-bridge.exe`.
+- **iRacing SDK bridge** (`electron/irsdk-bridge.exe`): Lightweight C# tool that sends Windows `BroadcastMsg` commands to iRacing for replay control, camera switching, and status checking. Called via `child_process.execFile` — no native Node modules needed.
+- **Preload bridge** (`electron/preload.js`): Exposes `window.irsdk` API — `replayJump()`, `replaySpeed()`, `replayCamera()`, `replaySearch()`, `getStatus()`.
 - **React renderer** (`src/`): All UI components.
 
 ### Layout
@@ -319,7 +373,8 @@ All websocket messages use `{ type, payload }` format.
 |-----------|---------|
 | Server | DigitalOcean droplet `45.55.216.21` |
 | Broadcast dashboard | Served by same droplet via nginx (built Vite output) |
-| Agent | Driver's PC (PyInstaller .exe or `python main.py`) |
+| SimHub Plugin | Driver's PC (DLL in SimHub folder, auto-updates from GitHub) |
+| Legacy Agent | Driver's PC (PyInstaller .exe or `python main.py`) — deprecated |
 | Steward app | Steward's PC (Electron — portable .exe or `npm run dev`) |
 | Deploy | `deploy.sh` — Node 20, nginx, pm2, ufw |
 
@@ -361,32 +416,47 @@ All websocket messages use `{ type, payload }` format.
 
 ---
 
-## 10. iRacing SDK Integration (Stubbed)
+## 10. iRacing SDK Integration (Live)
 
-The Electron main process IPC handlers are wired but stubbed. When `node-irsdk-2023` is added:
+The Electron main process calls `irsdk-bridge.exe` (a C# tool using Windows `SendNotifyMessage` + `RegisterWindowMessage("IRSDK_BROADCASTMSG")`) for all iRacing control. No native Node modules needed.
 
-| IPC Channel | Maps to | iRacing API |
-|-------------|---------|------------|
-| `irsdk:replay:jump` | `BroadcastMsg(ReplaySearchSessionTime, t)` | Jump to sessionTime |
-| `irsdk:replay:jump(-1)` | Jump to end of replay buffer | Go to live |
-| `irsdk:replay:speed` | `BroadcastMsg(ReplaySetPlaySpeed, speed)` | Set playback speed |
-| `irsdk:replay:camera` | `BroadcastMsg(CamSwitchNum, carIdx, camGroup)` | Switch camera view |
-| `irsdk:status` | Query SDK connection state | Connection check |
+| IPC Channel | Bridge Command | iRacing API |
+|-------------|---------------|------------|
+| `irsdk:replay:jump` | `replay-jump <sessionTime>` | `BroadcastMsg(ReplaySetPlayPosition, frame)` |
+| `irsdk:replay:speed` | `replay-speed <speed>` / `replay-pause` | `BroadcastMsg(ReplaySetPlaySpeed, speed)` |
+| `irsdk:replay:camera` | `camera <carIdx> <group>` | `BroadcastMsg(CamSwitchNum, carIdx+1, camGroup)` |
+| `irsdk:replay:search` | `replay-search <mode>` | `BroadcastMsg(ReplaySearch, mode)` |
+| `irsdk:status` | `status` | Process detection (`iRacingSim64DX11`) |
 
-Camera names (`cockpit`, `chase`, `far-chase`, `front`, `rear`, `chopper`, `blimp`) will be resolved to iRacing's `camGroupNum` values via `CameraInfo.Groups[]` at runtime.
+Camera names mapped to group numbers: `nose`(1), `cockpit`(10), `chase`(5), `farchase`(6), `rearchase`(17), `chopper`(16), `blimp`(15), `tv1-3`(11-13), `scenic`(14), `pitlane`(18).
+
+Search modes: `start`, `end`, `prev-incident`, `next-incident`, `prev-lap`, `next-lap`.
 
 ---
 
 ## 11. Repo Structure
 
 ```
-agent/
-  launcher.py           Tkinter GUI agent
-  main.py               CLI agent + MockIRacing
-  bots.py               55-car multi-class bot simulator
-  capture.py            iRacing SDK frame reader
-  protocol.py           Message constructors
-  config.py             SERVER_URL, rates
+plugins/simhub/BPRRaceControl/
+  BPRRaceControl.csproj   .NET 4.8 class library
+  BPRRaceControlPlugin.cs Main plugin (IPlugin + IDataPlugin + IWPFSettingsV2)
+  WebSocketClient.cs      Background websocket manager
+  TelemetryFrameBuilder.cs  Property → JSON mapping
+  StandingsBuilder.cs     CarIdx + Opponents → standings
+  NotificationOverlay.cs  WPF penalty/investigation overlays
+  PluginUpdater.cs        GitHub releases auto-updater
+  SettingsControl.cs      WPF settings panel
+  Protocol.cs             Message constants
+  PluginSettings.cs       Settings model
+  AssemblyInfo.cs         Version tracking
+
+agent/                    (legacy — deprecated, kept for bots)
+  launcher.py             Tkinter GUI agent
+  main.py                 CLI agent + MockIRacing
+  bots.py                 55-car multi-class bot simulator
+  capture.py              iRacing SDK frame reader
+  protocol.py             Message constructors
+  config.py               SERVER_URL, rates
 
 apps/server/src/
   main.js               HTTP + WebSocket server
@@ -399,8 +469,10 @@ apps/server/src/
   race-plans.js         Race plan persistence
 
 apps/steward/
-  electron/main.js      Electron main process + IPC
+  electron/main.js      Electron main process + IPC via irsdk-bridge
   electron/preload.js   IPC bridge (window.irsdk)
+  electron/irsdk-bridge.cs   C# source for iRacing BroadcastMsg tool
+  electron/irsdk-bridge.exe  Compiled bridge (no native Node deps)
   src/App.jsx           Root component + state management
   src/components/       13 UI components
   src/lib/ws-client.js  Steward WebSocket client
@@ -416,7 +488,12 @@ apps/web/
   src/hooks/            useAnimationFrame, useFullscreen, etc.
   src/lib/              ws-client, telemetry-buffer, utils
 
+installer/
+  simhub-plugin-setup.iss  Inno Setup script for SimHub plugin installer
+  setup.iss                Legacy agent installer
+  output/                  Built installer executables
+
 CLAUDE.md               Project context and build order
 ARCHITECTURE.md          This file
-FEATURES.md              Detailed feature guide (25 features)
+FEATURES.md              Detailed feature guide
 ```

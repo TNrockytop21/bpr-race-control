@@ -105,7 +105,7 @@ Detailed description of every feature in the system, how it works from the user'
 | Driver | < Name > | Cycles through connected drivers, switches camera |
 | Camera | Cockpit, Chase, Far Chase, Front, Rear, Chopper, Blimp | 7 camera views |
 
-**Technical:** All controls call through the Electron IPC bridge (`window.irsdk`). Currently stubbed — ready for `node-irsdk-2023` integration.
+**Technical:** All controls call through the Electron IPC bridge (`window.irsdk`) → `irsdk-bridge.exe` → iRacing's `BroadcastMsg` API. Fully live — controls the local iRacing instance directly.
 
 **Keyboard shortcuts:**
 | Key | Action |
@@ -283,13 +283,19 @@ Tab key cycles through all three views.
 
 ## DRIVER FEATURES
 
-### 17. Agent Connection
+### 17. SimHub Plugin Connection
 
-**What the driver does:** Launches the agent (.exe), enters their iRacing name, clicks Connect.
+**What the driver does:** Installs the BPR Race Control SimHub plugin (one-time: run the installer or drop the DLL into the SimHub folder). Opens SimHub — the plugin auto-connects when iRacing starts.
 
-**What happens:** Agent connects to `ws://45.55.216.21/ws/agent`, reads iRacing's shared memory for driver info and track, sends `agent:hello`, then streams telemetry frames at 20Hz.
+**What happens:** The plugin auto-detects the driver's name, car, and track from iRacing's session data. Connects to `ws://45.55.216.21/ws/agent`, sends `agent:hello`, then streams telemetry frames at 20Hz and standings at 2Hz.
 
-**Reconnection:** If the connection drops, the agent automatically retries every 3 seconds. The server deduplicates reconnecting drivers by name.
+**Settings:** In SimHub's left sidebar under "BPR Race Control" — server URL, auto-connect toggle, manual connect/disconnect button, Report Incident button.
+
+**Reconnection:** If the connection drops, the plugin automatically retries every 3 seconds.
+
+**Auto-update:** On SimHub launch (or via "Check for Updates" button), the plugin checks GitHub releases for a newer version. If available, a green banner appears. One click downloads the update, silently swaps the DLL, and restarts SimHub.
+
+**Legacy:** The standalone Python agent (`agent/launcher.py`) still works but is deprecated. The bot simulator (`agent/bots.py`) remains active for testing.
 
 ---
 
@@ -448,3 +454,64 @@ python bots.py --gt3 10 --lmp2 5  # smaller field for lighter testing
 - LMP2 cars lap GT3 cars, triggering blue flag scenarios
 
 **Connection handling:** Bots connect 0.5s apart to avoid overwhelming the server. 30-second websocket timeout. Auto-reconnect on disconnect.
+
+---
+
+## DISTRIBUTION & UPDATES
+
+### 26. SimHub Plugin Installer
+
+**What it is:** An Inno Setup installer (`BPR-RaceControl-SimHub-Plugin-Setup.exe`) for one-click installation.
+
+**What it does:**
+1. Auto-detects SimHub's installation directory (checks `C:\Program Files (x86)\SimHub`, `C:\Program Files\SimHub`, and registry)
+2. Copies `BPRRaceControl.dll` to the SimHub folder
+3. Shows a "restart SimHub" message
+4. Optionally launches SimHub after install
+
+**If SimHub not found:** Shows an error directing the user to install SimHub first.
+
+---
+
+### 27. Auto-Update System
+
+**What it does:** The plugin automatically checks for updates from GitHub releases on every SimHub launch.
+
+**How it works:**
+1. On `Init()`, background thread hits `https://api.github.com/repos/TNrockytop21/bpr-race-control/releases/latest`
+2. Compares release `tag_name` (e.g. `v1.0.4`) against the running assembly version
+3. If newer version found with a `BPRRaceControl.dll` asset attached, sets update-available flag
+4. Green banner appears in plugin settings: "Update available: v1.0.4 (current: v1.0.3)"
+5. "Check for Updates" button available anytime — no restart needed
+6. Driver clicks "Install Update" → plugin downloads DLL to temp, writes a silent VBS+batch updater script, closes SimHub
+7. Updater waits for SimHub to fully exit, copies new DLL over old one, deletes temp files, restarts SimHub
+8. Entire process is invisible — no console window, no manual file copying
+
+**Publishing an update (for maintainers):**
+1. Bump version in `AssemblyInfo.cs`
+2. Build: `dotnet build -c Release`
+3. Create GitHub release with tag `vX.Y.Z`, attach `BPRRaceControl.dll`
+4. All drivers see the update on their next SimHub launch
+
+---
+
+### 28. iRacing SDK Bridge
+
+**What it is:** A lightweight C# command-line tool (`irsdk-bridge.exe`) that sends Windows `BroadcastMsg` commands to iRacing.
+
+**Why it exists:** The Electron steward app needs to control iRacing's replay and camera. Native Node.js iRacing SDK bindings (`node-irsdk-2023`) require Visual Studio Build Tools for compilation. The bridge avoids this dependency entirely — it's a single .exe compiled with .NET Framework's built-in `csc.exe`.
+
+**Commands:**
+| Command | What it does |
+|---------|-------------|
+| `status` | Checks if iRacing is running (process detection) |
+| `replay-jump <sessionTime>` | Jumps replay to a specific session time |
+| `replay-speed <speed>` | Sets replay playback speed (supports slow-mo) |
+| `replay-pause` | Pauses replay |
+| `replay-play` | Resumes replay at 1x |
+| `replay-search <mode>` | Search to start/end/prev-incident/next-incident/prev-lap/next-lap |
+| `camera <carIdx> <group>` | Switches camera to a specific car and view |
+
+**Camera groups:** `nose`(1), `cockpit`(10), `chase`(5), `farchase`(6), `rearchase`(17), `chopper`(16), `blimp`(15), `tv1-3`(11-13), `scenic`(14), `pitlane`(18), or numeric group ID.
+
+**Output:** All commands return JSON to stdout for Electron to parse: `{"ok":true,"action":"replay-jump","sessionTime":123.45}`
