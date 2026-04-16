@@ -1,6 +1,8 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using GameReaderCommon;
 using Newtonsoft.Json.Linq;
 using SimHub.Plugins;
@@ -43,6 +45,16 @@ namespace BPRRaceControl
         private bool _wasGameRunning;
         private DateTime _lastProtestTime = DateTime.MinValue;
 
+        // Global hotkey
+        private HwndSource _hwndSource;
+        private const int WM_HOTKEY = 0x0312;
+        private const int HOTKEY_ID_PROTEST = 9001;
+
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
         // ── IPlugin ──────────────────────────────────────────────────
 
         public void Init(PluginManager pluginManager)
@@ -76,11 +88,15 @@ namespace BPRRaceControl
             _updater = new PluginUpdater();
             _updater.CheckForUpdateAsync();
 
+            // Register global protest hotkey
+            RegisterProtestHotkey();
+
             SimHub.Logging.Current.Info("[BPR] Plugin initialized");
         }
 
         public void End(PluginManager pluginManager)
         {
+            UnregisterProtestHotkey();
             _wsClient?.Dispose();
             this.SaveCommonSettings("GeneralSettings", _settings);
             SimHub.Logging.Current.Info("[BPR] Plugin shutdown");
@@ -274,9 +290,11 @@ namespace BPRRaceControl
                         SimHub.Logging.Current.Info(
                             $"[BPR] PENALTY: {penaltyType} | {notes}");
 
-                        // Show overlay on UI thread
-                        Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
-                            NotificationOverlay.ShowPenalty(penaltyType, timeSeconds, notes)));
+                        if (_settings.ShowPenaltyOverlay)
+                        {
+                            Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                                NotificationOverlay.ShowPenalty(penaltyType, timeSeconds, notes)));
+                        }
                         break;
 
                     case Protocol.ServerUnderInvestigation:
@@ -287,8 +305,11 @@ namespace BPRRaceControl
 
                         SimHub.Logging.Current.Info($"[BPR] UNDER INVESTIGATION: {invNotes}");
 
-                        Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
-                            NotificationOverlay.ShowInvestigation(invNotes)));
+                        if (_settings.ShowInvestigationOverlay)
+                        {
+                            Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                                NotificationOverlay.ShowInvestigation(invNotes)));
+                        }
                         break;
 
                     case Protocol.ServerMessage:
@@ -299,8 +320,11 @@ namespace BPRRaceControl
 
                         SimHub.Logging.Current.Info($"[BPR] RC MESSAGE: {message}");
 
-                        Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
-                            NotificationOverlay.ShowRaceControlMessage(message)));
+                        if (_settings.ShowRCMessageOverlay)
+                        {
+                            Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                                NotificationOverlay.ShowRaceControlMessage(message)));
+                        }
                         break;
 
                     case Protocol.ServerProtestAck:
@@ -386,5 +410,156 @@ namespace BPRRaceControl
         {
             this.SaveCommonSettings("GeneralSettings", _settings);
         }
+
+        /// <summary>
+        /// Re-register the protest hotkey after settings change.
+        /// Called from SettingsControl when the user changes the hotkey.
+        /// </summary>
+        public void ReregisterHotkey()
+        {
+            UnregisterProtestHotkey();
+            RegisterProtestHotkey();
+        }
+
+        // ── Global hotkey ────────────────────────────────────────────
+
+        private void RegisterProtestHotkey()
+        {
+            try
+            {
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        var window = Application.Current?.MainWindow;
+                        if (window == null) return;
+
+                        var helper = new WindowInteropHelper(window);
+                        if (helper.Handle == IntPtr.Zero)
+                        {
+                            // Window not ready yet, defer
+                            window.SourceInitialized += (s, e) => RegisterProtestHotkey();
+                            return;
+                        }
+
+                        _hwndSource = HwndSource.FromHwnd(helper.Handle);
+                        _hwndSource?.AddHook(HwndHook);
+
+                        ParseHotkey(_settings.ProtestHotkey, out uint mod, out uint vk);
+                        if (vk != 0)
+                        {
+                            RegisterHotKey(helper.Handle, HOTKEY_ID_PROTEST, mod, vk);
+                            SimHub.Logging.Current.Info("[BPR] Hotkey registered: " + _settings.ProtestHotkey);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        SimHub.Logging.Current.Error("[BPR] Hotkey registration failed: " + ex.Message);
+                    }
+                }));
+            }
+            catch { }
+        }
+
+        private void UnregisterProtestHotkey()
+        {
+            try
+            {
+                Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        var window = Application.Current?.MainWindow;
+                        if (window == null) return;
+                        var helper = new WindowInteropHelper(window);
+                        if (helper.Handle != IntPtr.Zero)
+                        {
+                            UnregisterHotKey(helper.Handle, HOTKEY_ID_PROTEST);
+                        }
+                        _hwndSource?.RemoveHook(HwndHook);
+                    }
+                    catch { }
+                }));
+            }
+            catch { }
+        }
+
+        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID_PROTEST)
+            {
+                SendProtest();
+                handled = true;
+            }
+            return IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// Parse a hotkey string like "F1", "Ctrl+F1", "Shift+F5" into
+        /// modifier flags and virtual key code.
+        /// </summary>
+        private static void ParseHotkey(string hotkey, out uint modifiers, out uint vk)
+        {
+            modifiers = 0;
+            vk = 0;
+            if (string.IsNullOrEmpty(hotkey)) return;
+
+            var parts = hotkey.ToUpper().Split('+');
+            foreach (var part in parts)
+            {
+                var p = part.Trim();
+                switch (p)
+                {
+                    case "CTRL": case "CONTROL": modifiers |= 0x0002; break;
+                    case "ALT": modifiers |= 0x0001; break;
+                    case "SHIFT": modifiers |= 0x0004; break;
+
+                    // Function keys
+                    case "F1": vk = 0x70; break;
+                    case "F2": vk = 0x71; break;
+                    case "F3": vk = 0x72; break;
+                    case "F4": vk = 0x73; break;
+                    case "F5": vk = 0x74; break;
+                    case "F6": vk = 0x75; break;
+                    case "F7": vk = 0x76; break;
+                    case "F8": vk = 0x77; break;
+                    case "F9": vk = 0x78; break;
+                    case "F10": vk = 0x79; break;
+                    case "F11": vk = 0x7A; break;
+                    case "F12": vk = 0x7B; break;
+
+                    // Common keys
+                    case "INSERT": case "INS": vk = 0x2D; break;
+                    case "DELETE": case "DEL": vk = 0x2E; break;
+                    case "HOME": vk = 0x24; break;
+                    case "END": vk = 0x23; break;
+                    case "PAGEUP": case "PGUP": vk = 0x21; break;
+                    case "PAGEDOWN": case "PGDN": vk = 0x22; break;
+
+                    // Numpad
+                    case "NUM0": vk = 0x60; break;
+                    case "NUM1": vk = 0x61; break;
+                    case "NUM2": vk = 0x62; break;
+                    case "NUM3": vk = 0x63; break;
+                    case "NUM4": vk = 0x64; break;
+                    case "NUM5": vk = 0x65; break;
+                    case "NUM6": vk = 0x66; break;
+                    case "NUM7": vk = 0x67; break;
+                    case "NUM8": vk = 0x68; break;
+                    case "NUM9": vk = 0x69; break;
+
+                    default:
+                        // Single letter/number (A-Z, 0-9)
+                        if (p.Length == 1)
+                        {
+                            char c = p[0];
+                            if (c >= 'A' && c <= 'Z') vk = (uint)c;
+                            else if (c >= '0' && c <= '9') vk = (uint)c;
+                        }
+                        break;
+                }
+            }
+        }
     }
 }
+

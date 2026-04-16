@@ -307,9 +307,78 @@ namespace BPRRaceControl
                 Margin = new Thickness(12, 0, 0, 0),
             });
 
+            // Hotkey row
+            actionsStack.Children.Add(Spacer(12));
+            actionsStack.Children.Add(FieldLabel("PROTEST HOTKEY"));
+            var hotkeyRow = new StackPanel { Orientation = Orientation.Horizontal };
+            var hotkeyInput = new TextBox
+            {
+                Text = _settings.ProtestHotkey,
+                Background = Brush("#0a0a0c"),
+                Foreground = Brush("#cccccc"),
+                BorderBrush = Brush("#222222"),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(10, 6, 10, 6),
+                FontSize = 12,
+                FontFamily = new FontFamily("Consolas, Courier New"),
+                CaretBrush = Brush("#cccccc"),
+                Width = 140,
+            };
+            hotkeyInput.TextChanged += (s, e) =>
+            {
+                _settings.ProtestHotkey = hotkeyInput.Text;
+                _plugin.SaveSettings();
+                _plugin.ReregisterHotkey();
+            };
+            hotkeyRow.Children.Add(hotkeyInput);
+            hotkeyRow.Children.Add(new TextBlock
+            {
+                Text = "e.g. F1, Ctrl+F5, Shift+F2",
+                Foreground = Brush("#444444"),
+                FontSize = 9,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 0, 0),
+            });
+            actionsStack.Children.Add(hotkeyRow);
+
             actionsStack.Children.Add(protestRow);
             actionsCard.Child = actionsStack;
             root.Children.Add(actionsCard);
+
+            root.Children.Add(Spacer(20));
+
+            // ═══════════════════════════════════════════════════════════
+            // NOTIFICATIONS
+            // ═══════════════════════════════════════════════════════════
+            root.Children.Add(SectionLabel("NOTIFICATIONS"));
+
+            var notifCard = Card();
+            var notifStack = new StackPanel();
+
+            var penaltyToggle = SettingsToggle("Penalty notifications",
+                "Show overlay when a penalty is issued", _settings.ShowPenaltyOverlay);
+            penaltyToggle.Checked += (s, e) => { _settings.ShowPenaltyOverlay = true; _plugin.SaveSettings(); };
+            penaltyToggle.Unchecked += (s, e) => { _settings.ShowPenaltyOverlay = false; _plugin.SaveSettings(); };
+            notifStack.Children.Add(penaltyToggle);
+
+            notifStack.Children.Add(Spacer(8));
+
+            var rcToggle = SettingsToggle("Race control messages",
+                "Show overlay for steward broadcasts", _settings.ShowRCMessageOverlay);
+            rcToggle.Checked += (s, e) => { _settings.ShowRCMessageOverlay = true; _plugin.SaveSettings(); };
+            rcToggle.Unchecked += (s, e) => { _settings.ShowRCMessageOverlay = false; _plugin.SaveSettings(); };
+            notifStack.Children.Add(rcToggle);
+
+            notifStack.Children.Add(Spacer(8));
+
+            var invToggle = SettingsToggle("Under investigation notices",
+                "Show overlay when your incident is being reviewed", _settings.ShowInvestigationOverlay);
+            invToggle.Checked += (s, e) => { _settings.ShowInvestigationOverlay = true; _plugin.SaveSettings(); };
+            invToggle.Unchecked += (s, e) => { _settings.ShowInvestigationOverlay = false; _plugin.SaveSettings(); };
+            notifStack.Children.Add(invToggle);
+
+            notifCard.Child = notifStack;
+            root.Children.Add(notifCard);
 
             root.Children.Add(Spacer(20));
 
@@ -543,6 +612,32 @@ namespace BPRRaceControl
         private static Border Spacer(double height)
         {
             return new Border { Height = height };
+        }
+
+        private static CheckBox SettingsToggle(string label, string description, bool isChecked)
+        {
+            var stack = new StackPanel();
+            stack.Children.Add(new TextBlock
+            {
+                Text = label,
+                Foreground = Brush("#cccccc"),
+                FontSize = 12,
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = description,
+                Foreground = Brush("#444444"),
+                FontSize = 9,
+                Margin = new Thickness(0, 2, 0, 0),
+            });
+
+            return new CheckBox
+            {
+                Content = stack,
+                IsChecked = isChecked,
+                Foreground = Brush("#cccccc"),
+                VerticalContentAlignment = VerticalAlignment.Center,
+            };
         }
     }
 }
