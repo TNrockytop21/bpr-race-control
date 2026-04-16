@@ -39,6 +39,7 @@ namespace BPRRaceControl
         private StandingsBuilder _standingsBuilder;
         private SettingsControl _settingsControl;
         private PluginUpdater _updater;
+        private JoystickManager _joystickManager;
 
         private AgentState _state = AgentState.Idle;
         private int _tickCounter;
@@ -91,12 +92,18 @@ namespace BPRRaceControl
             // Register global protest hotkey
             RegisterProtestHotkey();
 
+            // Joystick/wheel button binding
+            _joystickManager = new JoystickManager();
+            _joystickManager.OnButtonPressed += SendProtest;
+            _joystickManager.LoadBinding(_settings.WheelDeviceGuid, _settings.WheelButtonIndex);
+
             SimHub.Logging.Current.Info("[BPR] Plugin initialized");
         }
 
         public void End(PluginManager pluginManager)
         {
             UnregisterProtestHotkey();
+            _joystickManager?.Dispose();
             _wsClient?.Dispose();
             this.SaveCommonSettings("GeneralSettings", _settings);
             SimHub.Logging.Current.Info("[BPR] Plugin shutdown");
@@ -108,6 +115,9 @@ namespace BPRRaceControl
 
         public void DataUpdate(PluginManager pluginManager, ref GameData data)
         {
+            // Poll wheel button every tick (60Hz) — works even when not streaming
+            _joystickManager?.Poll();
+
             _lastGameData = data;
             bool gameRunning = data.GameRunning && data.GameName == "IRacing";
 
@@ -193,7 +203,7 @@ namespace BPRRaceControl
 
         public Control GetWPFSettingsControl(PluginManager pluginManager)
         {
-            _settingsControl = new SettingsControl(this, _settings, _wsClient, _updater);
+            _settingsControl = new SettingsControl(this, _settings, _wsClient, _updater, _joystickManager);
             return _settingsControl;
         }
 

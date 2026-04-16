@@ -15,6 +15,7 @@ namespace BPRRaceControl
         private readonly PluginSettings _settings;
         private readonly WebSocketClient _wsClient;
         private PluginUpdater _updater;
+        private JoystickManager _joystickManager;
 
         private Ellipse _statusDot;
         private TextBlock _statusText;
@@ -27,12 +28,13 @@ namespace BPRRaceControl
         private Button _updateButton;
 
         public SettingsControl(BPRRaceControlPlugin plugin, PluginSettings settings,
-            WebSocketClient wsClient, PluginUpdater updater)
+            WebSocketClient wsClient, PluginUpdater updater, JoystickManager joystickManager)
         {
             _plugin = plugin;
             _settings = settings;
             _wsClient = wsClient;
             _updater = updater;
+            _joystickManager = joystickManager;
 
             Background = Brush("#060608");
             BuildUI();
@@ -308,32 +310,116 @@ namespace BPRRaceControl
             });
             actionsStack.Children.Add(protestRow);
 
-            // Wheel button binding hint
-            var wheelHint = new Border
+            // Wheel / button box binding
+            actionsStack.Children.Add(Spacer(12));
+            actionsStack.Children.Add(FieldLabel("WHEEL / BUTTON BOX BINDING"));
+
+            var wheelBindRow = new StackPanel { Orientation = Orientation.Horizontal };
+
+            var _bindButton = StyledButton("Bind Button", "#1a1a1a", "#d4a017");
+            _bindButton.BorderBrush = Brush("#d4a017");
+            _bindButton.BorderThickness = new Thickness(1);
+
+            var _bindStatus = new TextBlock
             {
-                Background = Brush("#0a0a0c"),
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(10, 8, 10, 8),
-                Margin = new Thickness(0, 10, 0, 0),
+                Foreground = Brush("#888888"),
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0),
             };
-            var wheelStack = new StackPanel();
-            wheelStack.Children.Add(new TextBlock
+
+            // Show current binding
+            if (_settings.WheelButtonIndex >= 0 && !string.IsNullOrEmpty(_settings.WheelDeviceName))
             {
-                Text = "WHEEL / BUTTON BOX BINDING",
-                Foreground = Brush("#666666"),
-                FontSize = 8,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 0, 0, 4),
-            });
-            wheelStack.Children.Add(new TextBlock
+                _bindStatus.Text = _settings.WheelDeviceName + " — Button " + (_settings.WheelButtonIndex + 1);
+                _bindStatus.Foreground = Brush("#d4a017");
+            }
+            else
             {
-                Text = "To bind a wheel button: go to Controls and Events in SimHub's sidebar, find \"BPR Race Control - Report Incident\", and press your wheel button.",
-                Foreground = Brush("#555555"),
-                FontSize = 10,
-                TextWrapping = TextWrapping.Wrap,
-            });
-            wheelHint.Child = wheelStack;
-            actionsStack.Children.Add(wheelHint);
+                _bindStatus.Text = "No button bound";
+            }
+
+            _bindButton.Click += (s, e) =>
+            {
+                _bindButton.Content = "Press a button...";
+                _bindButton.IsEnabled = false;
+                _bindStatus.Text = "Waiting for input...";
+                _bindStatus.Foreground = Brush("#f59e0b");
+
+                _joystickManager.OnButtonCaptured += (deviceName, deviceGuid, buttonIndex) =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _settings.WheelDeviceGuid = deviceGuid.ToString();
+                        _settings.WheelDeviceName = deviceName;
+                        _settings.WheelButtonIndex = buttonIndex;
+                        _plugin.SaveSettings();
+
+                        _joystickManager.SetBinding(deviceGuid, buttonIndex);
+
+                        _bindStatus.Text = deviceName + " — Button " + (buttonIndex + 1);
+                        _bindStatus.Foreground = Brush("#d4a017");
+                        _bindButton.Content = "Bind Button";
+                        _bindButton.IsEnabled = true;
+                    }));
+                };
+
+                _joystickManager.StartCapture();
+
+                // Timeout after 10 seconds
+                var timer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(10)
+                };
+                timer.Tick += (s2, e2) =>
+                {
+                    timer.Stop();
+                    _joystickManager.StopCapture();
+                    if (_bindButton.Content.ToString() == "Press a button...")
+                    {
+                        _bindButton.Content = "Bind Button";
+                        _bindButton.IsEnabled = true;
+                        if (_settings.WheelButtonIndex >= 0)
+                            _bindStatus.Text = _settings.WheelDeviceName + " — Button " + (_settings.WheelButtonIndex + 1);
+                        else
+                            _bindStatus.Text = "No button bound";
+                        _bindStatus.Foreground = _settings.WheelButtonIndex >= 0 ? Brush("#d4a017") : Brush("#888888");
+                    }
+                };
+                timer.Start();
+            };
+
+            wheelBindRow.Children.Add(_bindButton);
+            wheelBindRow.Children.Add(_bindStatus);
+            actionsStack.Children.Add(wheelBindRow);
+
+            // Clear binding button
+            if (_settings.WheelButtonIndex >= 0)
+            {
+                var clearBtn = new Button
+                {
+                    Content = "Clear Binding",
+                    Background = Brushes.Transparent,
+                    Foreground = Brush("#555555"),
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(0, 4, 0, 4),
+                    FontSize = 9,
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Margin = new Thickness(0, 4, 0, 0),
+                };
+                clearBtn.Click += (s, e) =>
+                {
+                    _settings.WheelDeviceGuid = "";
+                    _settings.WheelDeviceName = "";
+                    _settings.WheelButtonIndex = -1;
+                    _plugin.SaveSettings();
+                    _joystickManager.ClearBinding();
+                    _bindStatus.Text = "No button bound";
+                    _bindStatus.Foreground = Brush("#888888");
+                    clearBtn.Visibility = Visibility.Collapsed;
+                };
+                actionsStack.Children.Add(clearBtn);
+            }
 
             // Hotkey row
             actionsStack.Children.Add(Spacer(12));

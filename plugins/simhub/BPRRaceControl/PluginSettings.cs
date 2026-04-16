@@ -26,5 +26,16 @@ namespace BPRRaceControl
 
         /// <summary>Keyboard shortcut for Report Incident (e.g. "F1", "Ctrl+F1", "F5").</summary>
         public string ProtestHotkey { get; set; } = "F1";
+
+        // ── Wheel button binding ─────────────────────────────────────
+
+        /// <summary>Device GUID for the bound wheel/button box (empty = not bound).</summary>
+        public string WheelDeviceGuid { get; set; } = "";
+
+        /// <summary>Device name for display purposes.</summary>
+        public string WheelDeviceName { get; set; } = "";
+
+        /// <summary>Button index on the device (0-based).</summary>
+        public int WheelButtonIndex { get; set; } = -1;
     }
 }

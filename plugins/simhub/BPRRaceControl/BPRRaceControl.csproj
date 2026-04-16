@@ -8,6 +8,7 @@
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <!-- SimHub assemblies — adjust HintPath if SimHub is installed elsewhere -->
@@ -26,6 +27,14 @@
     </Reference>
     <Reference Include="log4net">
       <HintPath>C:\Program Files (x86)\SimHub\log4net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX">
+      <HintPath>C:\Program Files (x86)\SimHub\SharpDX.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.DirectInput">
+      <HintPath>C:\Program Files (x86)\SimHub\SharpDX.DirectInput.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
