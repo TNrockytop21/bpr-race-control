@@ -300,12 +300,40 @@ namespace BPRRaceControl
 
             protestRow.Children.Add(new TextBlock
             {
-                Text = "10s cooldown. Bind to a button in Controls and Events.",
+                Text = "10s cooldown",
                 Foreground = Brush("#444444"),
                 FontSize = 9,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(12, 0, 0, 0),
             });
+            actionsStack.Children.Add(protestRow);
+
+            // Wheel button binding hint
+            var wheelHint = new Border
+            {
+                Background = Brush("#0a0a0c"),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 10, 0, 0),
+            };
+            var wheelStack = new StackPanel();
+            wheelStack.Children.Add(new TextBlock
+            {
+                Text = "WHEEL / BUTTON BOX BINDING",
+                Foreground = Brush("#666666"),
+                FontSize = 8,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 4),
+            });
+            wheelStack.Children.Add(new TextBlock
+            {
+                Text = "To bind a wheel button: go to Controls and Events in SimHub's sidebar, find \"BPR Race Control - Report Incident\", and press your wheel button.",
+                Foreground = Brush("#555555"),
+                FontSize = 10,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            wheelHint.Child = wheelStack;
+            actionsStack.Children.Add(wheelHint);
 
             // Hotkey row
             actionsStack.Children.Add(Spacer(12));
@@ -341,7 +369,6 @@ namespace BPRRaceControl
             });
             actionsStack.Children.Add(hotkeyRow);
 
-            actionsStack.Children.Add(protestRow);
             actionsCard.Child = actionsStack;
             root.Children.Add(actionsCard);
 
