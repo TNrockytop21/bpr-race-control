@@ -234,15 +234,23 @@ namespace BPRRaceControl
 
             File.WriteAllText(batchPath, batchContent);
 
-            SimHub.Logging.Current.Info("[BPR Updater] Batch script written: " + batchPath);
+            // Write a VBScript wrapper to run the batch silently (no console window)
+            var vbsPath = Path.Combine(Path.GetTempPath(), "bpr_update.vbs");
+            File.WriteAllText(vbsPath,
+                "CreateObject(\"Wscript.Shell\").Run \"\"\"" +
+                batchPath.Replace("\\", "\\\\") +
+                "\"\"\", 0, False\r\n");
 
-            // Launch the batch script (hidden window) and close SimHub
+            SimHub.Logging.Current.Info("[BPR Updater] Update scripts written");
+
+            // Launch via wscript (completely hidden, no console flash)
             var psi = new ProcessStartInfo
             {
-                FileName = batchPath,
-                WindowStyle = ProcessWindowStyle.Normal,
-                CreateNoWindow = false,
-                UseShellExecute = true,
+                FileName = "wscript.exe",
+                Arguments = "\"" + vbsPath + "\"",
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+                UseShellExecute = false,
             };
             Process.Start(psi);
 
