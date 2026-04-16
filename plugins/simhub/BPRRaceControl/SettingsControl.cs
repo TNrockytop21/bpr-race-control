@@ -29,21 +29,21 @@ namespace BPRRaceControl
         private Button _updateButton;
 
         // ── Color palette ────────────────────────────────────────────
-        static readonly string BG = "#060608";
-        static readonly string CARD = "#0c0c0e";
-        static readonly string CARD_BORDER = "#1a1a1e";
-        static readonly string INPUT_BG = "#08080a";
-        static readonly string INPUT_BORDER = "#1e1e22";
-        static readonly string TEXT_PRIMARY = "#e0e0e0";
-        static readonly string TEXT_SECONDARY = "#999999";
-        static readonly string TEXT_DIM = "#555555";
-        static readonly string TEXT_MUTED = "#3a3a3a";
+        static readonly string BG = "#0a0a0e";
+        static readonly string CARD = "#111116";
+        static readonly string CARD_BORDER = "#252530";
+        static readonly string INPUT_BG = "#0d0d12";
+        static readonly string INPUT_BORDER = "#2a2a35";
+        static readonly string TEXT_PRIMARY = "#f0f0f0";
+        static readonly string TEXT_SECONDARY = "#bbbbbb";
+        static readonly string TEXT_DIM = "#888888";
+        static readonly string TEXT_MUTED = "#666666";
         static readonly string ACCENT_RED = "#c8102e";
         static readonly string ACCENT_GOLD = "#d4a017";
         static readonly string ACCENT_GREEN = "#22c55e";
         static readonly string ACCENT_BLUE = "#378add";
         static readonly string DANGER = "#ef4444";
-        static readonly string SECTION_BG = "#0a0a0c";
+        static readonly string SECTION_BG = "#0e0e14";
 
         public SettingsControl(BPRRaceControlPlugin plugin, PluginSettings settings,
             WebSocketClient wsClient, PluginUpdater updater, JoystickManager joystickManager)
@@ -94,7 +94,7 @@ namespace BPRRaceControl
                 Background = Brush(CARD),
                 BorderBrush = Brush(CARD_BORDER),
                 BorderThickness = new Thickness(0, 0, 0, 1),
-                Padding = new Thickness(24, 16, 24, 16),
+                Padding = new Thickness(28, 20, 28, 20),
             };
             var headerRow = new StackPanel { Orientation = Orientation.Horizontal };
 
@@ -115,8 +115,8 @@ namespace BPRRaceControl
                     headerRow.Children.Add(new Image
                     {
                         Source = bitmap,
-                        Height = 50,
-                        Margin = new Thickness(0, 0, 16, 0),
+                        Height = 65,
+                        Margin = new Thickness(0, 0, 20, 0),
                         VerticalAlignment = VerticalAlignment.Center,
                     });
                 }
@@ -130,7 +130,7 @@ namespace BPRRaceControl
             {
                 Text = "RACE CONTROL",
                 Foreground = Brush(TEXT_PRIMARY),
-                FontSize = 20,
+                FontSize = 24,
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center,
             });
@@ -138,14 +138,14 @@ namespace BPRRaceControl
             {
                 Background = Brush(ACCENT_RED),
                 CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(8, 2, 8, 2),
-                Margin = new Thickness(12, 0, 0, 0),
+                Padding = new Thickness(10, 3, 10, 3),
+                Margin = new Thickness(14, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
                 Child = new TextBlock
                 {
                     Text = "LIVE",
                     Foreground = Brush("#ffffff"),
-                    FontSize = 9,
+                    FontSize = 10,
                     FontWeight = FontWeights.Bold,
                     VerticalAlignment = VerticalAlignment.Center,
                 },
@@ -157,15 +157,15 @@ namespace BPRRaceControl
             {
                 Text = "SimHub Telemetry Agent  " + verStr,
                 Foreground = Brush(TEXT_DIM),
-                FontSize = 10,
-                Margin = new Thickness(0, 3, 0, 0),
+                FontSize = 12,
+                Margin = new Thickness(0, 4, 0, 0),
             });
             headerRow.Children.Add(titleStack);
             headerBar.Child = headerRow;
             root.Children.Add(headerBar);
 
             // ── Content area ─────────────────────────────────────────
-            var content = new StackPanel { Margin = new Thickness(24, 20, 24, 24) };
+            var content = new StackPanel { Margin = new Thickness(28, 24, 28, 28) };
 
             // ═══════════════════════════════════════════════════════════
             // UPDATE BANNER (hidden by default)
@@ -185,7 +185,7 @@ namespace BPRRaceControl
             {
                 Text = "Update available",
                 Foreground = Brush(ACCENT_GREEN),
-                FontSize = 13,
+                FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
             };
@@ -223,7 +223,7 @@ namespace BPRRaceControl
             {
                 Text = "Disconnected",
                 Foreground = Brush(TEXT_SECONDARY),
-                FontSize = 14,
+                FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
             };
@@ -238,8 +238,8 @@ namespace BPRRaceControl
                 Foreground = Brush(TEXT_PRIMARY),
                 BorderBrush = Brush(INPUT_BORDER),
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(10, 8, 10, 8),
-                FontSize = 12,
+                Padding = new Thickness(12, 10, 12, 10),
+                FontSize = 14,
                 FontFamily = new FontFamily("Consolas"),
                 CaretBrush = Brush(TEXT_PRIMARY),
                 Margin = new Thickness(0, 0, 0, 12),
@@ -256,7 +256,7 @@ namespace BPRRaceControl
             {
                 Content = "Auto-connect when iRacing starts",
                 Foreground = Brush(TEXT_SECONDARY),
-                FontSize = 11,
+                FontSize = 13,
                 IsChecked = _settings.AutoConnect,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(16, 0, 0, 0),
@@ -291,8 +291,8 @@ namespace BPRRaceControl
             protestRow.Children.Add(new TextBlock
             {
                 Text = "10 second cooldown between reports",
-                Foreground = Brush(TEXT_MUTED),
-                FontSize = 10,
+                Foreground = Brush(TEXT_DIM),
+                FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(14, 0, 0, 0),
             });
@@ -313,8 +313,8 @@ namespace BPRRaceControl
                 Foreground = Brush(TEXT_PRIMARY),
                 BorderBrush = Brush(INPUT_BORDER),
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(10, 7, 10, 7),
-                FontSize = 12,
+                Padding = new Thickness(12, 10, 12, 10),
+                FontSize = 14,
                 FontFamily = new FontFamily("Consolas"),
                 CaretBrush = Brush(TEXT_PRIMARY),
                 Margin = new Thickness(0, 0, 0, 4),
@@ -330,7 +330,7 @@ namespace BPRRaceControl
             {
                 Text = "F1, Ctrl+F5, Shift+F2, etc.",
                 Foreground = Brush(TEXT_MUTED),
-                FontSize = 9,
+                FontSize = 10,
             });
             Grid.SetColumn(hotkeyPanel, 0);
             bindGrid.Children.Add(hotkeyPanel);
@@ -341,12 +341,11 @@ namespace BPRRaceControl
 
             var bindBtnRow = new StackPanel { Orientation = Orientation.Horizontal };
             var bindBtn = ActionButton("BIND", ACCENT_GOLD, "#000000");
-            bindBtn.Padding = new Thickness(16, 7, 16, 7);
 
             var bindStatus = new TextBlock
             {
                 Foreground = Brush(TEXT_SECONDARY),
-                FontSize = 11,
+                FontSize = 13,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(10, 0, 0, 0),
             };
@@ -515,7 +514,7 @@ namespace BPRRaceControl
                     {
                         Text = "BPRRaceControl." + prop,
                         Foreground = Brush(ACCENT_GOLD),
-                        FontSize = 10,
+                        FontSize = 12,
                         FontFamily = new FontFamily("Consolas"),
                     },
                 });
@@ -661,8 +660,8 @@ namespace BPRRaceControl
                 Background = Brush(CARD),
                 BorderBrush = Brush(CARD_BORDER),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(18, 16, 18, 16),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(22, 20, 22, 20),
             };
         }
 
@@ -671,10 +670,10 @@ namespace BPRRaceControl
             return new TextBlock
             {
                 Text = text,
-                Foreground = Brush(TEXT_DIM),
-                FontSize = 10,
+                Foreground = Brush(TEXT_SECONDARY),
+                FontSize = 12,
                 FontWeight = FontWeights.Bold,
-                Margin = new Thickness(2, 0, 0, 8),
+                Margin = new Thickness(2, 0, 0, 10),
             };
         }
 
@@ -684,9 +683,9 @@ namespace BPRRaceControl
             {
                 Text = text,
                 Foreground = Brush(TEXT_DIM),
-                FontSize = 9,
+                FontSize = 11,
                 FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 0, 0, 5),
+                Margin = new Thickness(0, 0, 0, 6),
             };
         }
 
@@ -698,8 +697,8 @@ namespace BPRRaceControl
                 Background = Brush(bg),
                 Foreground = Brush(fg),
                 BorderThickness = new Thickness(0),
-                Padding = new Thickness(18, 8, 18, 8),
-                FontSize = 11,
+                Padding = new Thickness(22, 10, 22, 10),
+                FontSize = 13,
                 FontWeight = FontWeights.Bold,
                 Cursor = System.Windows.Input.Cursors.Hand,
                 HorizontalAlignment = HorizontalAlignment.Left,
@@ -734,13 +733,13 @@ namespace BPRRaceControl
             {
                 Text = label,
                 Foreground = Brush(TEXT_PRIMARY),
-                FontSize = 12,
+                FontSize = 14,
             });
             textStack.Children.Add(new TextBlock
             {
                 Text = desc,
-                Foreground = Brush(TEXT_MUTED),
-                FontSize = 9,
+                Foreground = Brush(TEXT_DIM),
+                FontSize = 11,
                 Margin = new Thickness(0, 2, 0, 0),
             });
 
