@@ -258,26 +258,19 @@ namespace BPRRaceControl
                 "echo Update applied successfully!\r\n" +
                 "del \"{0}\" >NUL 2>&1\r\n" +
                 "echo Restarting SimHub...\r\n" +
-                "start \"\" \"{2}\"\r\n" +
+                "start \"SimHub\" /D \"{3}\" \"{2}\"\r\n" +
                 "del \"%~f0\" >NUL 2>&1\r\n",
-                tempDllPath, currentDllPath, simhubExe);
+                tempDllPath, currentDllPath, "SimHubWPF.exe", simhubDir);
 
             File.WriteAllText(batchPath, batchContent);
 
-            // Write a VBScript wrapper to run the batch silently (no console window)
-            var vbsPath = Path.Combine(Path.GetTempPath(), "bpr_update.vbs");
-            File.WriteAllText(vbsPath,
-                "CreateObject(\"Wscript.Shell\").Run \"\"\"" +
-                batchPath.Replace("\\", "\\\\") +
-                "\"\"\", 0, False\r\n");
+            SimHub.Logging.Current.Info("[BPR Updater] Batch script written: " + batchPath);
 
-            SimHub.Logging.Current.Info("[BPR Updater] Update scripts written");
-
-            // Launch via wscript (completely hidden, no console flash)
+            // Launch the batch directly with cmd /c, hidden window
             var psi = new ProcessStartInfo
             {
-                FileName = "wscript.exe",
-                Arguments = "\"" + vbsPath + "\"",
+                FileName = "cmd.exe",
+                Arguments = "/c \"" + batchPath + "\"",
                 WindowStyle = ProcessWindowStyle.Hidden,
                 CreateNoWindow = true,
                 UseShellExecute = false,
@@ -287,9 +280,13 @@ namespace BPRRaceControl
             SimHub.Logging.Current.Info("[BPR Updater] Updater launched, closing SimHub...");
 
             // Close SimHub — the batch script will wait for it, then replace the DLL
+            // Use Environment.Exit to ensure full process shutdown
             System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
             {
-                System.Windows.Application.Current?.Shutdown();
+                try { System.Windows.Application.Current?.Shutdown(); } catch { }
+                // Fallback: force exit after 2 seconds if Shutdown doesn't work
+                System.Threading.Tasks.Task.Delay(2000).ContinueWith(t =>
+                    Environment.Exit(0));
             }));
         }
     }
