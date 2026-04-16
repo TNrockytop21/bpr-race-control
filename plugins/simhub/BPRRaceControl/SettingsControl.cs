@@ -228,7 +228,7 @@ namespace BPRRaceControl
 
             root.Children.Add(new TextBlock
             {
-                Text = "10-second cooldown between reports",
+                Text = "10-second cooldown between reports. Bind to a button in Controls and Events.",
                 Foreground = Brush("#555555"),
                 FontSize = 9,
                 Margin = new Thickness(0, 0, 0, 20),
