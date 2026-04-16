@@ -22,6 +22,8 @@ namespace BPRRaceControl
         private string _latestVersion;
         private string _downloadUrl;
         private string _releaseNotes;
+        private System.Collections.Generic.List<KeyValuePair<string, string>> _extraAssets =
+            new System.Collections.Generic.List<KeyValuePair<string, string>>();
         private bool _checking;
         private bool _downloading;
 
@@ -112,17 +114,25 @@ namespace BPRRaceControl
                 {
                     _latestVersion = versionStr;
 
-                    // Find the DLL asset in the release
+                    // Find assets in the release
+                    _extraAssets.Clear();
                     var assets = release["assets"] as JArray;
                     if (assets != null)
                     {
                         foreach (var asset in assets)
                         {
                             var name = asset["name"]?.ToString() ?? "";
+                            var url = asset["browser_download_url"]?.ToString();
+                            if (string.IsNullOrEmpty(url)) continue;
+
                             if (name.Equals(DllFileName, StringComparison.OrdinalIgnoreCase))
                             {
-                                _downloadUrl = asset["browser_download_url"]?.ToString();
-                                break;
+                                _downloadUrl = url;
+                            }
+                            else
+                            {
+                                // Extra assets (logo, etc.) — download alongside the DLL
+                                _extraAssets.Add(new KeyValuePair<string, string>(name, url));
                             }
                         }
                     }
@@ -197,7 +207,26 @@ namespace BPRRaceControl
                 client.DownloadFile(_downloadUrl, tempDllPath);
             }
 
-            SimHub.Logging.Current.Info("[BPR Updater] Downloaded to: " + tempDllPath);
+            SimHub.Logging.Current.Info("[BPR Updater] Downloaded DLL to: " + tempDllPath);
+
+            // Download extra assets (logo, etc.) directly to SimHub folder
+            foreach (var asset in _extraAssets)
+            {
+                try
+                {
+                    var destPath = Path.Combine(simhubDir, asset.Key);
+                    using (var client = new WebClient())
+                    {
+                        client.Headers.Add("User-Agent", "BPRRaceControl/" + CurrentVersion);
+                        client.DownloadFile(asset.Value, destPath);
+                    }
+                    SimHub.Logging.Current.Info("[BPR Updater] Downloaded asset: " + asset.Key);
+                }
+                catch (Exception ex)
+                {
+                    SimHub.Logging.Current.Error("[BPR Updater] Asset download failed: " + asset.Key + " — " + ex.Message);
+                }
+            }
 
             // Find SimHub executable path
             var simhubExe = Path.Combine(simhubDir, "SimHubWPF.exe");
