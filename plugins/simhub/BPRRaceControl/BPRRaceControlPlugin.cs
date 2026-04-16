@@ -36,6 +36,7 @@ namespace BPRRaceControl
         private TelemetryFrameBuilder _frameBuilder;
         private StandingsBuilder _standingsBuilder;
         private SettingsControl _settingsControl;
+        private PluginUpdater _updater;
 
         private AgentState _state = AgentState.Idle;
         private int _tickCounter;
@@ -70,6 +71,10 @@ namespace BPRRaceControl
             // Register "Report Incident" action (can be bound to a button/key)
             pluginManager.AddAction("BPRRaceControl.ReportIncident", this.GetType(),
                 (pm, action) => SendProtest());
+
+            // Auto-update checker
+            _updater = new PluginUpdater();
+            _updater.CheckForUpdateAsync();
 
             SimHub.Logging.Current.Info("[BPR] Plugin initialized");
         }
@@ -172,7 +177,7 @@ namespace BPRRaceControl
 
         public Control GetWPFSettingsControl(PluginManager pluginManager)
         {
-            _settingsControl = new SettingsControl(this, _settings, _wsClient);
+            _settingsControl = new SettingsControl(this, _settings, _wsClient, _updater);
             return _settingsControl;
         }
 

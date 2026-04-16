@@ -7,6 +7,7 @@
     <AssemblyName>BPRRaceControl</AssemblyName>
     <LangVersion>latest</LangVersion>
     <UseWPF>true</UseWPF>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
   <!-- SimHub assemblies — adjust HintPath if SimHub is installed elsewhere -->

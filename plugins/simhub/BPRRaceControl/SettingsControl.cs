@@ -16,6 +16,8 @@ namespace BPRRaceControl
         private readonly PluginSettings _settings;
         private readonly WebSocketClient _wsClient;
 
+        private PluginUpdater _updater;
+
         private Ellipse _statusDot;
         private TextBlock _statusText;
         private Button _connectButton;
@@ -23,15 +25,45 @@ namespace BPRRaceControl
         private CheckBox _autoConnectCheck;
         private Button _protestButton;
 
-        public SettingsControl(BPRRaceControlPlugin plugin, PluginSettings settings, WebSocketClient wsClient)
+        // Update UI elements
+        private Border _updateBanner;
+        private TextBlock _updateText;
+        private Button _updateButton;
+
+        public SettingsControl(BPRRaceControlPlugin plugin, PluginSettings settings,
+            WebSocketClient wsClient, PluginUpdater updater)
         {
             _plugin = plugin;
             _settings = settings;
             _wsClient = wsClient;
+            _updater = updater;
 
             Background = new SolidColorBrush(Color(0x0d, 0x0d, 0x0f));
             BuildUI();
             UpdateConnectionStatus(_wsClient.IsConnected);
+
+            // Subscribe to update events
+            if (_updater != null)
+            {
+                _updater.OnUpdateCheckComplete += () =>
+                {
+                    Dispatcher.BeginInvoke(new Action(RefreshUpdateBanner));
+                };
+                _updater.OnDownloadComplete += (success, error) =>
+                {
+                    if (!success)
+                    {
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            _updateText.Text = "Update failed: " + error;
+                            _updateButton.Content = "Retry";
+                            _updateButton.IsEnabled = true;
+                        }));
+                    }
+                };
+                // Show banner if update was already detected before settings opened
+                RefreshUpdateBanner();
+            }
         }
 
         private void BuildUI()
@@ -49,11 +81,49 @@ namespace BPRRaceControl
             });
             root.Children.Add(new TextBlock
             {
-                Text = "SimHub Agent Plugin",
+                Text = "SimHub Agent Plugin  v" + (_updater != null ? _updater.CurrentVersion.ToString(3) : "1.0.0"),
                 Foreground = Brush("#666666"),
                 FontSize = 11,
-                Margin = new Thickness(0, 0, 0, 20),
+                Margin = new Thickness(0, 0, 0, 12),
             });
+
+            // ── Update banner (hidden by default) ────────────────────
+            _updateBanner = new Border
+            {
+                Background = Brush("#0a1a0a"),
+                BorderBrush = Brush("#22c55e"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 16),
+                Visibility = Visibility.Collapsed,
+            };
+            var updateStack = new StackPanel();
+            _updateText = new TextBlock
+            {
+                Text = "Update available",
+                Foreground = Brush("#22c55e"),
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 8),
+            };
+            updateStack.Children.Add(_updateText);
+            _updateButton = new Button
+            {
+                Content = "Install Update",
+                Background = Brush("#22c55e"),
+                Foreground = Brush("#000000"),
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(16, 8, 16, 8),
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _updateButton.Click += UpdateButton_Click;
+            updateStack.Children.Add(_updateButton);
+            _updateBanner.Child = updateStack;
+            root.Children.Add(_updateBanner);
 
             // ── Connection status ────────────────────────────────────
             var statusBorder = new Border
@@ -258,6 +328,32 @@ namespace BPRRaceControl
                 _protestButton.IsEnabled = true;
             };
             timer.Start();
+        }
+
+        // ── Update UI ────────────────────────────────────────────────
+
+        private void RefreshUpdateBanner()
+        {
+            if (_updater == null) return;
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(RefreshUpdateBanner));
+                return;
+            }
+
+            if (_updater.UpdateAvailable)
+            {
+                _updateText.Text = "Update available: v" + _updater.LatestVersion +
+                    " (current: v" + _updater.CurrentVersion.ToString(3) + ")";
+                _updateBanner.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void UpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            _updateButton.Content = "Downloading...";
+            _updateButton.IsEnabled = false;
+            _updater.DownloadAndApplyUpdate();
         }
 
         // ── Helpers ──────────────────────────────────────────────────
