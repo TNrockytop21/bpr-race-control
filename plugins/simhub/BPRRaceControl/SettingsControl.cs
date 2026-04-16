@@ -130,13 +130,45 @@ namespace BPRRaceControl
                 FontSize = 24,
                 FontWeight = FontWeights.ExtraBold,
             });
-            headerStack.Children.Add(new TextBlock
+            var headerBottom = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+            headerBottom.Children.Add(new TextBlock
             {
                 Text = "SimHub Telemetry Agent  " + VerStr,
                 Foreground = Brush("rgba(255,255,255,0.6)"),
                 FontSize = 12,
-                Margin = new Thickness(0, 4, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
             });
+
+            var chkUpdBtn = new Button
+            {
+                Content = "CHECK FOR UPDATES",
+                Background = Brush("rgba(255,255,255,0.15)"),
+                Foreground = Brush("#ffffff"),
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(14, 5, 14, 5),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Margin = new Thickness(16, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            chkUpdBtn.Click += (s, e) =>
+            {
+                chkUpdBtn.Content = "CHECKING...";
+                chkUpdBtn.IsEnabled = false;
+                _updater.OnUpdateCheckComplete += () =>
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        chkUpdBtn.Content = _updater.UpdateAvailable ? "UPDATE FOUND!" : "UP TO DATE";
+                        chkUpdBtn.Foreground = _updater.UpdateAvailable ? Brush(GREEN) : Brush("#ffffff");
+                        chkUpdBtn.IsEnabled = true;
+                        RefreshUpdateBanner();
+                    }));
+                _updater.CheckForUpdateAsync();
+            };
+            headerBottom.Children.Add(chkUpdBtn);
+            headerStack.Children.Add(headerBottom);
+
             header.Child = headerStack;
             root.Children.Add(header);
 
@@ -445,33 +477,6 @@ namespace BPRRaceControl
             }
             body.Children.Add(chipWrap);
 
-            // Check for updates link
-            var chkBtn = new Button
-            {
-                Content = "Check for Updates",
-                Background = Brushes.Transparent,
-                Foreground = Brush(TEXT_HINT),
-                BorderThickness = new Thickness(0),
-                Padding = new Thickness(0, 8, 0, 4),
-                FontSize = 12,
-                Cursor = System.Windows.Input.Cursors.Hand,
-                HorizontalAlignment = HorizontalAlignment.Left,
-            };
-            chkBtn.Click += (s, e) =>
-            {
-                chkBtn.Content = "Checking...";
-                chkBtn.IsEnabled = false;
-                _updater.OnUpdateCheckComplete += () =>
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        chkBtn.Content = _updater.UpdateAvailable ? "Update found!" : "Up to date  " + VerStr;
-                        chkBtn.Foreground = _updater.UpdateAvailable ? Brush(GREEN) : Brush(TEXT_HINT);
-                        chkBtn.IsEnabled = true;
-                        RefreshUpdateBanner();
-                    }));
-                _updater.CheckForUpdateAsync();
-            };
-            body.Children.Add(chkBtn);
 
             // Footer
             body.Children.Add(new Border { Height = 16 });
