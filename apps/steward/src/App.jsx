@@ -12,6 +12,9 @@ import { ReportExport } from './components/ReportExport';
 import { IncidentHeatmap } from './components/IncidentHeatmap';
 import { LiveStandings } from './components/LiveStandings';
 import { StewardModal } from './components/StewardModal';
+import { SplitViewLayout } from './layouts/SplitViewLayout';
+import { CommandCenterLayout } from './layouts/CommandCenterLayout';
+import { PriorityQueueLayout } from './layouts/PriorityQueueLayout';
 
 const styles = {
   app: {
@@ -121,6 +124,15 @@ export function App() {
   });
   const [penalties, setPenalties] = useState([]);
   const lastSessionTimeRef = useRef(null);
+
+  // Layout selection — persisted in localStorage
+  const [layout, setLayout] = useState(() => {
+    try { return localStorage.getItem('bpr-layout') || 'split'; } catch { return 'split'; }
+  });
+  const changeLayout = useCallback((l) => {
+    setLayout(l);
+    try { localStorage.setItem('bpr-layout', l); } catch {}
+  }, []);
 
   // ── Multi-steward coordination ─────────────────────────────
   const [showStewardModal, setShowStewardModal] = useState(true);
@@ -500,6 +512,34 @@ export function App() {
             </div>
           )}
 
+          {/* Layout selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '12px' }}>
+            {[
+              { id: 'split', label: 'Split', icon: '◫' },
+              { id: 'command', label: 'Command', icon: '☰' },
+              { id: 'queue', label: 'Queue', icon: '▤' },
+              { id: 'classic', label: 'Classic', icon: '◱' },
+            ].map((l) => (
+              <button
+                key={l.id}
+                onClick={() => changeLayout(l.id)}
+                title={l.label + ' View'}
+                style={{
+                  background: layout === l.id ? 'rgba(200,16,46,0.15)' : 'transparent',
+                  border: layout === l.id ? '1px solid rgba(200,16,46,0.4)' : '1px solid #222',
+                  color: layout === l.id ? '#c8102e' : '#555',
+                  fontSize: '12px',
+                  padding: '3px 8px',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontWeight: layout === l.id ? 700 : 400,
+                }}
+              >
+                {l.icon}
+              </button>
+            ))}
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div
               style={{
@@ -514,9 +554,53 @@ export function App() {
         </div>
       </div>
 
-      {/* Body */}
+      {/* Body — Active Layout */}
       <div style={styles.body}>
-        {/* Left sidebar: driver list + incident panel */}
+        {layout === 'split' && (
+          <SplitViewLayout
+            drivers={drivers} standings={standings} sessionInfo={sessionInfo} trackShape={trackShape}
+            selectedDriverIds={selectedDriverIds} onToggleDriver={toggleDriver}
+            driverDropdownOpen={driverDropdownOpen} onToggleDropdown={() => setDriverDropdownOpen(!driverDropdownOpen)}
+            incidents={incidents} incidentFilter={incidentFilter} incidentData={incidentData}
+            onFilterChange={setIncidentFilter} onAddIncident={addIncident}
+            onReviewIncident={reviewIncident} onCancelReview={cancelReview}
+            reviewingIncident={reviewingIncident}
+            incidentLocks={incidentLocks} currentStewardName={stewardName}
+            penalties={penalties} onResolveIncident={resolveIncident}
+            lastSessionTime={lastSessionTimeRef.current}
+          />
+        )}
+        {layout === 'command' && (
+          <CommandCenterLayout
+            drivers={drivers} standings={standings} sessionInfo={sessionInfo} trackShape={trackShape}
+            selectedDriverIds={selectedDriverIds} onToggleDriver={toggleDriver}
+            driverDropdownOpen={driverDropdownOpen} onToggleDropdown={() => setDriverDropdownOpen(!driverDropdownOpen)}
+            incidents={incidents} incidentFilter={incidentFilter} incidentData={incidentData}
+            onFilterChange={setIncidentFilter} onAddIncident={addIncident}
+            onReviewIncident={reviewIncident} onCancelReview={cancelReview}
+            reviewingIncident={reviewingIncident}
+            incidentLocks={incidentLocks} currentStewardName={stewardName}
+            penalties={penalties} onResolveIncident={resolveIncident}
+            lastSessionTime={lastSessionTimeRef.current}
+          />
+        )}
+        {layout === 'queue' && (
+          <PriorityQueueLayout
+            drivers={drivers} standings={standings} sessionInfo={sessionInfo} trackShape={trackShape}
+            selectedDriverIds={selectedDriverIds} onToggleDriver={toggleDriver}
+            driverDropdownOpen={driverDropdownOpen} onToggleDropdown={() => setDriverDropdownOpen(!driverDropdownOpen)}
+            incidents={incidents} incidentFilter={incidentFilter} incidentData={incidentData}
+            onFilterChange={setIncidentFilter} onAddIncident={addIncident}
+            onReviewIncident={reviewIncident} onCancelReview={cancelReview}
+            reviewingIncident={reviewingIncident}
+            incidentLocks={incidentLocks} currentStewardName={stewardName}
+            penalties={penalties} onResolveIncident={resolveIncident}
+            lastSessionTime={lastSessionTimeRef.current}
+          />
+        )}
+        {layout === 'classic' && (
+          <>
+        {/* Classic layout — original sidebar + tabs */}
         <div style={styles.sidebar}>
           <div style={styles.sidebarContent}>
             {/* Driver selector — custom dropdown */}
@@ -734,6 +818,8 @@ export function App() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </div>
   );
