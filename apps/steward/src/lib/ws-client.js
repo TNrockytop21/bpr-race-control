@@ -4,7 +4,7 @@
  * Auto-reconnects on disconnect.
  */
 
-const SERVER_URL = 'ws://45.55.216.21/ws/steward';
+const SERVER_URL = 'wss://racecontrol.bitepointracing.com/ws/steward';
 const RECONNECT_DELAY = 3000;
 
 class StewardWsClient {

@@ -6,7 +6,7 @@ namespace BPRRaceControl
     public class PluginSettings
     {
         /// <summary>WebSocket server URL.</summary>
-        public string ServerUrl { get; set; } = "ws://45.55.216.21/ws/agent";
+        public string ServerUrl { get; set; } = "wss://racecontrol.bitepointracing.com/ws/agent";
 
         /// <summary>Auto-connect when iRacing session is detected.</summary>
         public bool AutoConnect { get; set; } = true;
