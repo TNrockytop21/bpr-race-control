@@ -11,6 +11,7 @@ import { TrackMap } from './components/TrackMap';
 import { ReportExport } from './components/ReportExport';
 import { IncidentHeatmap } from './components/IncidentHeatmap';
 import { LiveStandings } from './components/LiveStandings';
+import { StewardModal } from './components/StewardModal';
 
 const styles = {
   app: {
@@ -120,6 +121,13 @@ export function App() {
   });
   const [penalties, setPenalties] = useState([]);
   const lastSessionTimeRef = useRef(null);
+
+  // ── Multi-steward coordination ─────────────────────────────
+  const [showStewardModal, setShowStewardModal] = useState(true);
+  const [stewardName, setStewardName] = useState('');
+  const [stewardRole, setStewardRole] = useState('MAIN');
+  const [connectedStewards, setConnectedStewards] = useState([]);
+  const [incidentLocks, setIncidentLocks] = useState({}); // incidentId → { stewardName, ... }
 
   useEffect(() => {
     const unsubs = [
@@ -255,6 +263,35 @@ export function App() {
         };
         setIncidents((prev) => [...prev, incident]);
       }),
+
+      // ── Multi-steward coordination listeners ───────────────
+      wsClient.on('steward:list', (payload) => {
+        setConnectedStewards(payload.stewards || []);
+        setIncidentLocks(payload.locks || {});
+      }),
+
+      wsClient.on('incident:locked', (payload) => {
+        if (payload.denied) {
+          alert(`Incident is being reviewed by ${payload.stewardName}`);
+          return;
+        }
+        setIncidentLocks((prev) => ({
+          ...prev,
+          [payload.incidentId]: {
+            stewardName: payload.stewardName,
+            stewardId: payload.stewardId,
+            lockedAt: payload.lockedAt,
+          },
+        }));
+      }),
+
+      wsClient.on('incident:unlocked', (payload) => {
+        setIncidentLocks((prev) => {
+          const next = { ...prev };
+          delete next[payload.incidentId];
+          return next;
+        });
+      }),
     ];
 
     return () => unsubs.forEach((u) => u());
@@ -276,7 +313,19 @@ export function App() {
     setIncidents((prev) => [...prev, incident]);
   }, []);
 
+  // ── Steward identity ─────────────────────────────────────
+  const handleStewardJoin = useCallback(({ name, role }) => {
+    setStewardName(name);
+    setStewardRole(role);
+    setShowStewardModal(false);
+    wsClient.send('steward:hello', { name, role });
+  }, []);
+
+  // ── Incident review with locking ─────────────────────────
   const reviewIncident = useCallback((incident) => {
+    // Lock the incident so other stewards can't review it
+    wsClient.send('steward:lockIncident', { incidentId: incident.id });
+
     wsClient.send('request:incidentWindow', {
       driverIds: incident.involvedDrivers,
       centerSessionTime: incident.sessionTime,
@@ -301,7 +350,23 @@ export function App() {
     }
   }, []);
 
+  const cancelReview = useCallback(() => {
+    if (reviewingIncident) {
+      wsClient.send('steward:unlockIncident', { incidentId: reviewingIncident.id });
+      setIncidents((prev) =>
+        prev.map((inc) =>
+          inc.id === reviewingIncident.id ? { ...inc, status: 'open' } : inc
+        )
+      );
+    }
+    setReviewingIncident(null);
+    setIncidentData(null);
+  }, [reviewingIncident]);
+
   const resolveIncident = useCallback((incidentId, penalty) => {
+    // Unlock the incident
+    wsClient.send('steward:unlockIncident', { incidentId });
+
     setPenalties((prev) => [...prev, penalty]);
     setIncidents((prev) =>
       prev.map((inc) =>
@@ -365,7 +430,7 @@ export function App() {
         case 'Digit6': irsdk?.replayCamera(0, 'blimp'); break;
         case 'Escape':
           if (reviewingIncident) {
-            setReviewingIncident(null);
+            cancelReview();
           }
           break;
         case 'Tab':
@@ -385,6 +450,9 @@ export function App() {
 
   return (
     <div style={styles.app}>
+      {/* Steward identity modal */}
+      {showStewardModal && <StewardModal onSubmit={handleStewardJoin} />}
+
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.logo}>
@@ -399,6 +467,39 @@ export function App() {
           <span style={{ color: '#888' }}>
             {driverCount} driver{driverCount !== 1 ? 's' : ''}
           </span>
+
+          {/* Steward roster */}
+          {connectedStewards.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#555', fontSize: '10px' }}>|</span>
+              {connectedStewards.map((s, i) => (
+                <div key={s.id || i} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div style={{
+                    width: '6px', height: '6px', borderRadius: '50%',
+                    background: s.role === 'MAIN' ? '#c8102e' : '#378add',
+                  }} />
+                  <span style={{
+                    color: s.name === stewardName ? '#eee' : '#888',
+                    fontSize: '11px',
+                    fontWeight: s.name === stewardName ? 700 : 400,
+                  }}>
+                    {s.name}
+                  </span>
+                  <span style={{
+                    fontSize: '8px',
+                    fontWeight: 700,
+                    padding: '1px 4px',
+                    borderRadius: '2px',
+                    background: s.role === 'MAIN' ? 'rgba(200,16,46,0.2)' : 'rgba(55,138,221,0.2)',
+                    color: s.role === 'MAIN' ? '#c8102e' : '#378add',
+                  }}>
+                    {s.role}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div
               style={{
@@ -530,6 +631,9 @@ export function App() {
                 onFilterChange={setIncidentFilter}
                 onAddIncident={addIncident}
                 onReviewIncident={reviewIncident}
+                onCancelReview={cancelReview}
+                incidentLocks={incidentLocks}
+                currentStewardName={stewardName}
               />
             </div>
           </div>

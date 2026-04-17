@@ -142,6 +142,9 @@ export function IncidentPanel({
   onFilterChange,
   onAddIncident,
   onReviewIncident,
+  onCancelReview,
+  incidentLocks = {},
+  currentStewardName = '',
 }) {
   const [notes, setNotes] = useState('');
 
@@ -305,6 +308,25 @@ export function IncidentPanel({
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Lock status badge */}
+                  {incidentLocks[inc.id] && (
+                    <span style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      padding: '2px 6px',
+                      borderRadius: '3px',
+                      background: incidentLocks[inc.id].stewardName === currentStewardName
+                        ? 'rgba(37, 99, 235, 0.15)'
+                        : 'rgba(245, 158, 11, 0.15)',
+                      color: incidentLocks[inc.id].stewardName === currentStewardName
+                        ? '#60a5fa'
+                        : '#f59e0b',
+                    }}>
+                      {incidentLocks[inc.id].stewardName === currentStewardName
+                        ? 'You are reviewing'
+                        : `${incidentLocks[inc.id].stewardName}`}
+                    </span>
+                  )}
                   <span
                     style={{
                       ...styles.incidentStatus,
@@ -324,12 +346,23 @@ export function IncidentPanel({
                   >
                     {inc.status.replace('_', ' ')}
                   </span>
-                  <button
-                    style={styles.reviewBtn}
-                    onClick={() => onReviewIncident(inc)}
-                  >
-                    Review
-                  </button>
+                  {inc.status !== 'resolved' && (
+                    <button
+                      style={{
+                        ...styles.reviewBtn,
+                        ...(incidentLocks[inc.id] && incidentLocks[inc.id].stewardName !== currentStewardName
+                          ? { opacity: 0.3, cursor: 'not-allowed' }
+                          : {}),
+                      }}
+                      onClick={() => {
+                        if (incidentLocks[inc.id] && incidentLocks[inc.id].stewardName !== currentStewardName) return;
+                        onReviewIncident(inc);
+                      }}
+                      disabled={incidentLocks[inc.id] && incidentLocks[inc.id].stewardName !== currentStewardName}
+                    >
+                      Review
+                    </button>
+                  )}
                 </div>
               </div>
               );
