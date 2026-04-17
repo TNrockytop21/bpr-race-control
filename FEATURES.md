@@ -182,13 +182,17 @@ Detailed description of every feature in the system, how it works from the user'
 
 ### 11. Multi-Steward Coordination
 
-**What it does:** Prevents two stewards from reviewing the same incident simultaneously.
+**What it does:** Prevents two stewards from reviewing the same incident simultaneously. Full identity and locking UI in the steward app.
+
+**Steward identity:** On launch, a modal (`StewardModal.jsx`) prompts the steward to enter their name and select a role (MAIN or SUPPORT). This sends `steward:hello` to the server. The header displays a live steward roster with role badges — red for MAIN, blue for SUPPORT.
+
+**Incident locking UI:** Each incident in the feed shows a lock status badge. When a steward clicks "Review", the incident is automatically locked to them. The badge shows the lock holder's name. Other stewards see the lock and cannot review the same incident. Locks auto-release on resolve, cancel, or disconnect.
 
 **How it works:**
 1. Each steward identifies themselves via `steward:hello` with a name and role (MAIN or SUPPORT)
-2. When a steward clicks "Review" on an incident, `steward:lockIncident` is sent
+2. When a steward clicks "Review" on an incident, `steward:lockIncident` is sent automatically
 3. If the incident is already locked by another steward, the requesting steward gets a denial with the lock holder's name
-4. When a steward finishes reviewing (resolves or cancels), `steward:unlockIncident` releases the lock
+4. When a steward finishes reviewing (resolves or cancels), `steward:unlockIncident` releases the lock automatically
 5. If a steward disconnects, all their locks are automatically released
 6. The steward roster and lock state are broadcast to all connected stewards
 
@@ -274,13 +278,61 @@ Tab key cycles through all three views.
 
 ---
 
+### 17a. Selectable Layouts
+
+**What it does:** Three layout options let stewards customize the UI arrangement for their workflow. Selected via a dropdown in the header bar. Choice is persisted in `localStorage`.
+
+| Layout | Best for |
+|--------|---------|
+| **Split View** | General use. Sidebar + tabbed main area. Default. |
+| **Command Center** | Multi-monitor or large screens. All panels visible at once — no tab switching. |
+| **Priority Queue** | High-incident sessions. Incident list dominates with inline review. |
+
+All layouts render the same components — they just arrange them differently. Switching layouts preserves all state (selected drivers, active incident review, etc.).
+
+---
+
+### 17b. Local Network Remote Control
+
+**What it does:** Serves the steward UI as a web page on the local network, allowing any LAN device (tablet, phone, second PC) to control iRacing replay remotely.
+
+**How it works:** `local-server.js` starts an Express server on port 5180 alongside Electron. It serves the built steward UI as static files and exposes HTTP endpoints that proxy iRacing SDK commands to `irsdk-bridge.exe`. `irsdk-browser.js` auto-detects whether it's running in Electron or a browser and routes iRacing commands accordingly — IPC in Electron, HTTP in browser.
+
+**Usage:** Open `http://<steward-pc-ip>:5180` on any device on the same network. Full steward UI with replay control, incident review, penalty issuance.
+
+**Limitation:** iRacing must be running on the PC running the Electron app. The browser client controls it remotely via the local server.
+
+---
+
+### 17c. HTTPS / WSS Encryption
+
+**What it does:** All production traffic between clients and the server is encrypted via Cloudflare.
+
+**Domain:** `racecontrol.bitepointracing.com` — Cloudflare DNS with proxy enabled. TLS terminated at Cloudflare edge, proxied to the droplet over HTTP internally.
+
+**Impact:** Websocket connections use `wss://` instead of `ws://`. CSP headers updated to allow `wss://racecontrol.bitepointracing.com`. Direct IP fallback remains for local development and testing.
+
+---
+
+### 17d. Standings Smoothing
+
+**What it does:** Eliminates visual jitter in standings tables and battle tracker during live racing.
+
+**Techniques:**
+- **Stable React keys:** Standings rows keyed by `carIdx` (constant per car) instead of race position (changes every update). Prevents unnecessary DOM re-creation.
+- **requestAnimationFrame throttling:** Standings updates batched to display refresh rate, preventing mid-frame repaints.
+- **CSS transitions:** Position changes animate smoothly instead of snapping.
+- **BattleTracker hysteresis:** Battles require 1.5s within threshold to appear, 2.0s outside to disappear. Prevents battles flickering in and out at the boundary.
+
+---
+
 ## DRIVER FEATURES
 
 ### 17. SimHub Plugin Connection
 
 **What the driver does:** Installs the BPR Race Control SimHub plugin (one-time: run the installer or drop the DLL into the SimHub folder). Opens SimHub — the plugin auto-connects when iRacing starts.
 
-**What happens:** The plugin auto-detects the driver's name, car, and track from iRacing's session data. Connects to `ws://45.55.216.21/ws/agent`, sends `agent:hello`, then streams telemetry frames at 20Hz and standings at 2Hz.
+**What happens:** The plugin auto-detects the driver's name, car, and track from iRacing's session data. Connects to `wss://racecontrol.bitepointracing.com/ws/agent`, sends `agent:hello`, then streams telemetry frames at 20Hz and standings at 2Hz.
 
 **Settings:** In SimHub's left sidebar under "BPR Race Control" — server URL, auto-connect toggle, manual connect/disconnect button, Report Incident button.
 
@@ -335,7 +387,7 @@ Tab key cycles through all three views.
 
 ### 20. Broadcast Dashboard
 
-**What it is:** A full-screen web dashboard at `http://45.55.216.21` designed for the broadcast crew. Read-only — no steward controls.
+**What it is:** A full-screen web dashboard at `https://racecontrol.bitepointracing.com` designed for the broadcast crew. Read-only — no steward controls.
 
 **Layout — 6 panels:**
 1. **Live Standings** (main area) — full timing tower with position, car #, class (LMP2/GT3), driver, laps, interval, gap, best/last lap, sector times, pit status. Purple = overall best sector. Green = personal best.
@@ -401,7 +453,6 @@ Tab key cycles through all three views.
 | `incident` | Incident count change | Driver, delta, total, sessionTime |
 | `penalty` | Penalty issued | Driver, type, seconds, notes |
 | `driver_left` | Driver disconnect | Driver ID, name |
-| `contact` | Contact detected | Both drivers, lat-G values |
 | `blue_flag` | Blue flag violation | Both drivers, duration |
 | `penalty_served` | Penalty served | Driver, penalty type |
 | `rc_message` | Race control message | Message text, target |

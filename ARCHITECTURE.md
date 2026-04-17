@@ -174,7 +174,7 @@ Recording starts automatically when the first agent connects with track info. Ke
 
 ## 3. Steward App (`apps/steward/`)
 
-Electron + React + Vite desktop application. Runs on the steward's PC alongside iRacing. Connects to `ws://45.55.216.21/ws/steward`.
+Electron + React + Vite desktop application. Runs on the steward's PC alongside iRacing. Connects to `wss://racecontrol.bitepointracing.com/ws/steward` (or direct IP fallback).
 
 ### Architecture
 
@@ -183,11 +183,28 @@ Electron + React + Vite desktop application. Runs on the steward's PC alongside 
 - **Preload bridge** (`electron/preload.js`): Exposes `window.irsdk` API — `replayJump()`, `replaySpeed()`, `replayCamera()`, `replaySearch()`, `getStatus()`.
 - **React renderer** (`src/`): All UI components.
 
-### Layout
+### Multi-steward identity
+
+On launch, a modal (`StewardModal.jsx`) prompts for steward name and role (MAIN / SUPPORT). This sends `steward:hello` to the server. The header displays a steward roster with role badges (red MAIN, blue SUPPORT). Incident lock status badges show which steward is reviewing each incident. Locks are automatically acquired on review, released on resolve or cancel, and cleared on disconnect.
+
+### Selectable layouts
+
+Three layouts selectable from a dropdown in the header, persisted in `localStorage`:
+
+| Layout | Description |
+|--------|-------------|
+| **Split View** | Default. Sidebar (drivers, incidents, RC messages) + main area (tabbed telemetry/standings/summary). Classic two-column. |
+| **Command Center** | Multi-panel grid — standings, incidents, telemetry, and track map all visible simultaneously. No tabs. |
+| **Priority Queue** | Incident-first. Large incident list dominates the view with inline review. Optimized for high-incident sessions. |
+
+Layout components live in `src/layouts/` — each receives the same props and renders the same child components in different arrangements.
+
+### Layout (Split View — default)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Header: BPR Race Control — track name, driver count, connection │
+│  Header: BPR Race Control — track, drivers, steward roster,     │
+│          layout selector, connection status                      │
 ├──────────────┬───────────────────────────────────────────────────┤
 │              │                                                   │
 │  Driver      │  [Telemetry] [Standings] [Driver Summary]         │
@@ -213,6 +230,12 @@ Electron + React + Vite desktop application. Runs on the steward's PC alongside 
 │  first)      │                                                   │
 └──────────────┴───────────────────────────────────────────────────┘
 ```
+
+### Local network server
+
+`local-server.js` runs an Express server on port 5180 alongside Electron. It serves the steward UI as a static web page and proxies iRacing SDK commands over HTTP REST endpoints. Any device on the LAN can open `http://<steward-ip>:5180` in a browser to get the full steward UI with remote replay control.
+
+`src/lib/irsdk-browser.js` provides the same `window.irsdk` API as the Electron preload bridge, but routes commands over HTTP to the local server instead of Electron IPC. It auto-detects the runtime environment (Electron vs browser) and picks the right transport.
 
 ### Components (13)
 
@@ -253,7 +276,7 @@ Electron + React + Vite desktop application. Runs on the steward's PC alongside 
 
 ## 4. Broadcast Dashboard (`apps/web/`)
 
-Vite + React web app served at `http://45.55.216.21`. Connects to `/ws/viewer`. Read-only.
+Vite + React web app served at `https://racecontrol.bitepointracing.com`. Connects to `/ws/viewer`. Read-only.
 
 ### Layout
 
@@ -352,7 +375,6 @@ All websocket messages use `{ type, payload }` format.
 - Per-driver raw-frame ring buffer (10 min at 20Hz = 12,000 frames per driver)
 - Per-driver incident count tracking
 - Blue flag proximity pairs + cooldowns
-- Contact detection cooldowns (30s per pair)
 - Pending penalty serving queue
 - Event log (last 200 events)
 - Agent websocket registry (`agentSockets` Map) for reverse messaging
@@ -369,20 +391,27 @@ All websocket messages use `{ type, payload }` format.
 | Component | Location |
 |-----------|---------|
 | Server | DigitalOcean droplet `45.55.216.21` |
+| Domain | `racecontrol.bitepointracing.com` — Cloudflare DNS + proxy |
 | Broadcast dashboard | Served by same droplet via nginx (built Vite output) |
 | SimHub Plugin | Driver's PC (DLL in SimHub folder, auto-updates from GitHub) |
 | Legacy Agent | Driver's PC (PyInstaller .exe or `python main.py`) — deprecated |
 | Steward app | Steward's PC (Electron — portable .exe or `npm run dev`) |
+| Local network server | Steward's PC, port 5180 — serves steward UI to LAN browsers |
 | Deploy | `deploy.sh` — Node 20, nginx, pm2, ufw |
+
+### HTTPS / WSS via Cloudflare
+
+All production traffic routes through `racecontrol.bitepointracing.com`. Cloudflare terminates TLS and proxies to the droplet. Websocket endpoints use `wss://` in production. CSP headers updated to allow `wss://racecontrol.bitepointracing.com`. Direct IP access (`ws://45.55.216.21`) remains as fallback.
 
 ### Endpoints
 | URL | Purpose |
 |-----|---------|
-| `ws://45.55.216.21/ws/agent` | Agent telemetry stream |
-| `ws://45.55.216.21/ws/viewer` | Broadcast dashboard websocket |
-| `ws://45.55.216.21/ws/steward` | Steward app websocket |
-| `http://45.55.216.21/health` | Health check |
-| `http://45.55.216.21/` | Broadcast web dashboard |
+| `wss://racecontrol.bitepointracing.com/ws/agent` | Agent telemetry stream |
+| `wss://racecontrol.bitepointracing.com/ws/viewer` | Broadcast dashboard websocket |
+| `wss://racecontrol.bitepointracing.com/ws/steward` | Steward app websocket |
+| `https://racecontrol.bitepointracing.com/health` | Health check |
+| `https://racecontrol.bitepointracing.com/` | Broadcast web dashboard |
+| `http://<steward-ip>:5180/` | Local network steward UI (LAN only) |
 
 ---
 
@@ -407,6 +436,8 @@ All websocket messages use `{ type, payload }` format.
 - **Auto-detection supplements manual.** Server auto-flags incidents (contact, blue flag, incident count), but stewards can also flag manually. Both appear in the same incident feed.
 - **Broadcast dashboard is read-only.** Shares the same websocket events but exposes no controls.
 - **Multi-class aware.** Standings include `carClass` field. LMP2/GT3 displayed with distinct colors.
+- **Standings smoothing.** Stable React keys (carIdx, not position), `requestAnimationFrame` throttling, CSS transitions for position changes. BattleTracker uses hysteresis (1.5s entry, 2.0s exit) to prevent flicker.
+- **Local network access.** Steward UI is dual-runtime: Electron for local iRacing SDK, browser via `local-server.js` for LAN devices. `irsdk-browser.js` auto-detects environment.
 
 ---
 
@@ -467,9 +498,15 @@ apps/steward/
   electron/preload.js   IPC bridge (window.irsdk)
   electron/irsdk-bridge.cs   C# source for iRacing BroadcastMsg tool
   electron/irsdk-bridge.exe  Compiled bridge (no native Node deps)
+  local-server.js       Express server on port 5180 — serves UI + proxies irsdk over HTTP
   src/App.jsx           Root component + state management
-  src/components/       13 UI components
+  src/components/       13 UI components + StewardModal.jsx
+  src/layouts/          Selectable layout components
+    SplitViewLayout.jsx     Default two-column layout
+    CommandCenterLayout.jsx Multi-panel grid layout
+    PriorityQueueLayout.jsx Incident-first layout
   src/lib/ws-client.js  Steward WebSocket client
+  src/lib/irsdk-browser.js  Browser-compatible irsdk API (HTTP to local-server)
   vite.config.js        Renderer build config
   package.json          Build scripts (dev/pack/dist)
 
