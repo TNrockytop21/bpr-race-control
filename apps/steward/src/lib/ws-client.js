@@ -4,7 +4,10 @@
  * Auto-reconnects on disconnect.
  */
 
-const SERVER_URL = 'wss://racecontrol.bitepointracing.com/ws/steward';
+const SERVERS = [
+  'wss://racecontrol.bitepointracing.com/ws/steward',
+  'ws://45.55.216.21/ws/steward', // fallback if WSS fails
+];
 const RECONNECT_DELAY = 3000;
 
 class StewardWsClient {
@@ -12,12 +15,15 @@ class StewardWsClient {
     this._listeners = new Map();
     this._ws = null;
     this._connected = false;
+    this._serverIndex = 0;
     this._connect();
   }
 
   _connect() {
+    const url = SERVERS[this._serverIndex];
+    console.log('[ws] connecting to', url);
     try {
-      this._ws = new WebSocket(SERVER_URL);
+      this._ws = new WebSocket(url);
     } catch {
       this._scheduleReconnect();
       return;
@@ -45,12 +51,14 @@ class StewardWsClient {
       this._scheduleReconnect();
     };
 
-    this._ws.onerror = () => {
-      // onclose will fire after this
+    this._ws.onerror = (err) => {
+      console.error('[ws] error:', err?.message || err?.type || 'unknown');
     };
   }
 
   _scheduleReconnect() {
+    // Try next server on failure
+    this._serverIndex = (this._serverIndex + 1) % SERVERS.length;
     setTimeout(() => this._connect(), RECONNECT_DELAY);
   }
 
