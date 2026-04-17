@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, useMemo, useCallback } from 'react';
+import { createContext, useContext, useReducer, useEffect, useMemo, useCallback, useRef } from 'react';
 import { wsClient } from '../lib/ws-client';
 
 const SessionContext = createContext(null);
@@ -207,9 +207,24 @@ export function SessionProvider({ children }) {
       wsClient.on('profile:updated', (payload) =>
         dispatch({ type: 'PROFILE_UPDATED', payload })
       ),
-      wsClient.on('standings', (payload) =>
-        dispatch({ type: 'STANDINGS', payload })
-      ),
+      // Throttle standings updates — only apply once per animation frame
+      // to prevent excessive re-renders from 2Hz server updates
+      (() => {
+        let pendingStandings = null;
+        let rafId = null;
+        return wsClient.on('standings', (payload) => {
+          pendingStandings = payload;
+          if (!rafId) {
+            rafId = requestAnimationFrame(() => {
+              if (pendingStandings) {
+                dispatch({ type: 'STANDINGS', payload: pendingStandings });
+                pendingStandings = null;
+              }
+              rafId = null;
+            });
+          }
+        });
+      })(),
     ];
 
     return () => unsubs.forEach((u) => u());

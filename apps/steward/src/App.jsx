@@ -139,9 +139,20 @@ export function App() {
         if (payload.points) setTrackShape(payload.points);
       }),
 
-      wsClient.on('standings', (payload) => {
-        setStandings(Array.isArray(payload) ? payload : []);
-      }),
+      // Throttle standings to animation frame to prevent excessive re-renders
+      (() => {
+        let pending = null;
+        let rafId = null;
+        return wsClient.on('standings', (payload) => {
+          pending = Array.isArray(payload) ? payload : [];
+          if (!rafId) {
+            rafId = requestAnimationFrame(() => {
+              if (pending) { setStandings(pending); pending = null; }
+              rafId = null;
+            });
+          }
+        });
+      })(),
 
       wsClient.on('driver:joined', ({ driverId, driverName, car }) => {
         setDrivers((prev) => ({

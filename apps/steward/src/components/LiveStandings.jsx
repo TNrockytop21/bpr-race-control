@@ -166,11 +166,12 @@ export function LiveStandings({ standings, incidents, onDriverClick }) {
 
               return (
                 <tr
-                  key={`${s.pos}-${s.name}`}
+                  key={s.carIdx != null ? `car-${s.carIdx}` : `${s.carNum}-${s.name}`}
                   onClick={() => onDriverClick?.(idx)}
                   style={{
                     background: isInPit ? 'rgba(245,158,11,0.05)' : 'transparent',
                     cursor: onDriverClick ? 'pointer' : 'default',
+                    transition: 'background-color 0.3s ease',
                   }}
                   onMouseEnter={(e) => {
                     if (onDriverClick) e.currentTarget.style.background = 'rgba(139,92,246,0.08)';

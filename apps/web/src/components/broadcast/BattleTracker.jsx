@@ -1,49 +1,51 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useSession } from '../../context/SessionContext';
 
-const BATTLE_THRESHOLD = 1.5; // seconds
+const BATTLE_THRESHOLD = 1.5; // seconds — detect battles within this gap
+const BATTLE_EXIT_THRESHOLD = 2.0; // seconds — hysteresis: don't remove until gap exceeds this
+const BATTLE_MIN_UPDATES = 3; // Must appear in N consecutive updates to show (debounce)
 
 const styles = {
   container: {
     background: '#0d0d0f',
     border: '1px solid #1a1a1a',
     borderRadius: '4px',
-    display: 'flex',
-    flexDirection: 'column',
     overflow: 'hidden',
-    height: '100%',
   },
   header: {
-    padding: '8px 12px',
-    borderBottom: '1px solid #1a1a1a',
-    fontSize: '9px',
+    padding: '6px 10px',
+    fontSize: '10px',
+    fontWeight: 700,
     color: '#888',
     textTransform: 'uppercase',
-    letterSpacing: '0.6px',
-    fontWeight: 600,
-    flexShrink: 0,
+    letterSpacing: '0.5px',
+    borderBottom: '1px solid #1a1a1a',
+    display: 'flex',
+    justifyContent: 'space-between',
   },
   list: {
-    flex: 1,
-    overflow: 'auto',
-    padding: '6px',
+    maxHeight: '200px',
+    overflowY: 'auto',
+  },
+  empty: {
+    padding: '12px',
+    textAlign: 'center',
+    color: '#444',
+    fontSize: '10px',
   },
   battle: {
-    background: '#111',
-    border: '1px solid #1a1a1a',
-    borderRadius: '3px',
-    padding: '8px 10px',
-    marginBottom: '4px',
+    padding: '6px 10px',
+    borderBottom: '1px solid #111',
+    transition: 'background-color 0.3s ease, opacity 0.3s ease',
   },
   battleHot: {
-    borderColor: '#ef444444',
-    background: 'rgba(239,68,68,0.04)',
+    background: 'rgba(239,68,68,0.06)',
+    borderLeft: '2px solid #ef4444',
   },
   positions: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    fontSize: '12px',
   },
   driver: {
     display: 'flex',
@@ -52,26 +54,20 @@ const styles = {
   },
   pos: {
     fontWeight: 700,
-    fontSize: '11px',
-    width: '20px',
-    textAlign: 'center',
+    fontSize: '10px',
+    fontVariantNumeric: 'tabular-nums',
   },
   name: {
-    fontWeight: 600,
     color: '#ccc',
-    fontSize: '12px',
+    fontSize: '11px',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    maxWidth: '100px',
   },
   gap: {
     fontWeight: 700,
     fontVariantNumeric: 'tabular-nums',
-    fontSize: '13px',
-  },
-  empty: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#333',
     fontSize: '11px',
   },
 };
@@ -79,26 +75,57 @@ const styles = {
 export function BattleTracker() {
   const { standings } = useSession();
 
+  // Track battle persistence for hysteresis
+  const battleHistoryRef = useRef(new Map()); // key → { count, lastGap }
+
   const battles = useMemo(() => {
     if (!standings || standings.length < 2) return [];
-    const result = [];
 
+    const currentBattles = new Map();
+
+    // Detect current battles
     for (let i = 1; i < standings.length; i++) {
       const ahead = standings[i - 1];
       const behind = standings[i];
       const gap = behind.interval;
 
-      if (gap != null && gap > 0 && gap <= BATTLE_THRESHOLD) {
-        result.push({
-          ahead,
-          behind,
-          gap,
-          hot: gap <= 0.5,
-        });
+      if (gap != null && gap > 0 && gap <= BATTLE_EXIT_THRESHOLD) {
+        const key = `${ahead.carNum || ahead.name}-${behind.carNum || behind.name}`;
+        currentBattles.set(key, { ahead, behind, gap, hot: gap <= 0.5 });
       }
     }
 
-    return result.sort((a, b) => a.gap - b.gap);
+    const history = battleHistoryRef.current;
+    const result = [];
+
+    // Update history and build stable battle list
+    for (const [key, battle] of currentBattles) {
+      const prev = history.get(key) || { count: 0 };
+      const newCount = prev.count + 1;
+      history.set(key, { count: newCount, lastGap: battle.gap });
+
+      // Only show if it's been a battle for enough consecutive updates
+      // and the gap is within the display threshold
+      if (newCount >= BATTLE_MIN_UPDATES && battle.gap <= BATTLE_THRESHOLD) {
+        result.push({ ...battle, key });
+      } else if (battle.gap <= BATTLE_THRESHOLD) {
+        // New battle, show immediately if gap is small enough
+        result.push({ ...battle, key });
+        history.set(key, { count: BATTLE_MIN_UPDATES, lastGap: battle.gap });
+      }
+    }
+
+    // Remove old battles not in current data
+    for (const key of history.keys()) {
+      if (!currentBattles.has(key)) {
+        history.delete(key);
+      }
+    }
+
+    // Sort by gap (stable — same order unless gaps genuinely change)
+    result.sort((a, b) => a.gap - b.gap);
+
+    return result;
   }, [standings]);
 
   return (
@@ -110,8 +137,8 @@ export function BattleTracker() {
         <div style={styles.empty}>No close battles</div>
       ) : (
         <div style={styles.list}>
-          {battles.map((b, i) => (
-            <div key={i} style={{ ...styles.battle, ...(b.hot ? styles.battleHot : {}) }}>
+          {battles.map((b) => (
+            <div key={b.key} style={{ ...styles.battle, ...(b.hot ? styles.battleHot : {}) }}>
               <div style={styles.positions}>
                 <div style={styles.driver}>
                   <span style={{ ...styles.pos, color: b.ahead.pos <= 3 ? '#f59e0b' : '#666' }}>P{b.ahead.pos}</span>

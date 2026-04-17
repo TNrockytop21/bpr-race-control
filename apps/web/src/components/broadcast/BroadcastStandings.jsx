@@ -116,8 +116,9 @@ export function BroadcastStandings() {
               const isBest = s.bestLap && s.bestLap === overallBest;
               const isPB = s.lastLap && s.bestLap && s.lastLap === s.bestLap;
               return (
-                <tr key={`${s.pos}-${s.name}`} style={{
+                <tr key={s.carIdx != null ? `car-${s.carIdx}` : `${s.carNum}-${s.name}`} style={{
                   background: s.onPitRoad ? 'rgba(245,158,11,0.04)' : 'transparent',
+                  transition: 'background-color 0.3s ease',
                 }}>
                   <td style={{ ...styles.td, textAlign: 'center', fontWeight: 700, color: s.pos === 1 ? '#f59e0b' : s.pos <= 3 ? '#ccc' : '#666' }}>{s.pos}</td>
                   <td style={{ ...styles.td, textAlign: 'center', color: '#555', fontWeight: 600 }}>{s.carNum}</td>
