@@ -15,6 +15,13 @@ import { StewardModal } from './components/StewardModal';
 import { SplitViewLayout } from './layouts/SplitViewLayout';
 import { CommandCenterLayout } from './layouts/CommandCenterLayout';
 import { PriorityQueueLayout } from './layouts/PriorityQueueLayout';
+import { getIrsdk } from './lib/irsdk-browser';
+
+// If running in a browser (not Electron), install the HTTP fallback
+// so all existing window.irsdk references work without changes.
+if (!window.irsdk) {
+  window.irsdk = getIrsdk();
+}
 
 const styles = {
   app: {
