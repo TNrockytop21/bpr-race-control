@@ -402,10 +402,6 @@ export function App() {
     setReviewingIncident(null);
   }, [incidents]);
 
-  const cancelReview = useCallback(() => {
-    setReviewingIncident(null);
-  }, []);
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e) => {
