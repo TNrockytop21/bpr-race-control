@@ -10,6 +10,8 @@ import { SectorComparison } from '../../components/analytics/SectorComparison';
 import { BroadcastStandings } from '../../components/broadcast/BroadcastStandings';
 import { IncidentFeed } from '../../components/broadcast/IncidentFeed';
 import { BattleTracker } from '../../components/broadcast/BattleTracker';
+import { TelemetryOverlayCard, TelemetryCompare } from '../../components/analytics/TelemetryOverlayCard';
+import { LapTraceComparison, DriverVsDriver } from '../../components/analytics/LapTraceComparison';
 
 export function GapOverlay() {
   const { driverFilter, maxDrivers } = useOutletContext();
@@ -51,6 +53,48 @@ export function BattleOverlay() {
   return (
     <div style={{ height: '100vh', overflow: 'auto' }}>
       <BattleTracker />
+    </div>
+  );
+}
+
+// ── Telemetry overlays ───────────────────────────────────────
+
+export function TelemetryHudOverlay() {
+  const { driverFilter } = useOutletContext();
+  const driverName = driverFilter?.[0] || null;
+  return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px' }}>
+      <TelemetryOverlayCard driverName={driverName} />
+    </div>
+  );
+}
+
+export function TelemetryCompareOverlay() {
+  const { driverFilter, maxDrivers } = useOutletContext();
+  return (
+    <div style={{ height: '100vh', padding: '8px' }}>
+      <TelemetryCompare driverNames={driverFilter} maxDrivers={maxDrivers || 2} />
+    </div>
+  );
+}
+
+export function LapCompareOverlay() {
+  const { driverFilter } = useOutletContext();
+  const driverName = driverFilter?.[0] || null;
+  return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px' }}>
+      <LapTraceComparison driverName={driverName} />
+    </div>
+  );
+}
+
+export function HeadToHeadOverlay() {
+  const { driverFilter } = useOutletContext();
+  const driverA = driverFilter?.[0] || null;
+  const driverB = driverFilter?.[1] || null;
+  return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px' }}>
+      <DriverVsDriver driverAName={driverA} driverBName={driverB} />
     </div>
   );
 }

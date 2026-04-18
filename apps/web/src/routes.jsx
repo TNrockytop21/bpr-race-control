@@ -10,6 +10,10 @@ import {
   TowerOverlay,
   TickerOverlay,
   BattleOverlay,
+  TelemetryHudOverlay,
+  TelemetryCompareOverlay,
+  LapCompareOverlay,
+  HeadToHeadOverlay,
 } from './pages/overlays/index';
 
 export const router = createBrowserRouter([
@@ -35,6 +39,10 @@ export const router = createBrowserRouter([
       { path: 'tower',     element: <TowerOverlay /> },      // Standings tower
       { path: 'ticker',    element: <TickerOverlay /> },     // Event feed
       { path: 'battle',    element: <BattleOverlay /> },     // Battle tracker
+      { path: 'telemetry', element: <TelemetryHudOverlay /> },  // Single driver HUD
+      { path: 'compare',  element: <TelemetryCompareOverlay /> }, // Side by side telemetry
+      { path: 'laptrace', element: <LapCompareOverlay /> },   // Current vs best lap
+      { path: 'h2h',      element: <HeadToHeadOverlay /> },   // Head to head comparison
     ],
   },
 ]);

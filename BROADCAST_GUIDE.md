@@ -84,6 +84,15 @@ Each overlay is a standalone page with transparent background designed for OBS B
 | `/overlay/stints` | Lap-by-lap pace chart. Shows tire degradation and consistency. | 800 x 400 |
 | `/overlay/sectors` | Head-to-head sector comparison (S1/S2/S3 bars). | 600 x 300 |
 
+#### Telemetry
+
+| URL | What it shows | Recommended size |
+|-----|---------------|-----------------|
+| `/overlay/telemetry?drivers=D.Newman` | Single driver HUD — speed, gear, throttle/brake bars, lap time, position | 360 x 250 |
+| `/overlay/compare?drivers=D.Newman,A.Riegel` | Side-by-side telemetry cards for two drivers | 740 x 250 |
+| `/overlay/laptrace?drivers=D.Newman` | Current vs best lap — sector-by-sector delta with +/- time | 400 x 300 |
+| `/overlay/h2h?drivers=D.Newman,A.Riegel` | Head-to-head comparison — gap, best/last lap, sector chart | 450 x 350 |
+
 #### Race Data
 
 | URL | What it shows | Recommended size |
@@ -108,6 +117,30 @@ https://racecontrol.bitepointracing.com/overlay/gaps?drivers=D.Newman,A.Riegel,M
 https://racecontrol.bitepointracing.com/overlay/stints?max=4
 https://racecontrol.bitepointracing.com/overlay/tower?max=20
 ```
+
+---
+
+### Telemetry Overlays for Commentators
+
+**Single driver HUD** (`/overlay/telemetry?drivers=D.Newman`):
+- Live speed (km/h), gear number, RPM
+- Throttle bar (green) and brake bar (red)
+- Current lap time vs best lap time
+- Position indicator
+
+**Side-by-side** (`/overlay/compare?drivers=D.Newman,A.Riegel`):
+- Two driver HUD cards next to each other
+- Perfect for battle coverage — see both drivers' inputs in real time
+
+**Lap trace** (`/overlay/laptrace?drivers=D.Newman`):
+- Shows current sector times vs driver's best lap sectors
+- Green sectors = faster than personal best, red = slower
+- Overall delta displayed (+/- seconds)
+
+**Head to head** (`/overlay/h2h?drivers=D.Newman,A.Riegel`):
+- Full comparison card: gap, positions, best/last laps
+- Sector-by-sector line chart
+- Shows exactly where each driver is faster
 
 ---
 
@@ -221,6 +254,10 @@ Open different overlay URLs on different monitors:
 | `/overlay/tower` | Standings timing tower |
 | `/overlay/ticker` | Event feed / race ticker |
 | `/overlay/battle` | Active battle tracker |
+| `/overlay/telemetry` | Single driver telemetry HUD |
+| `/overlay/compare` | Side-by-side telemetry comparison |
+| `/overlay/laptrace` | Current vs best lap comparison |
+| `/overlay/h2h` | Head-to-head driver comparison |
 
 ---
 
