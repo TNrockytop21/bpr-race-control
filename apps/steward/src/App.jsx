@@ -141,10 +141,28 @@ export function App() {
     try { localStorage.setItem('bpr-layout', l); } catch {}
   }, []);
 
-  // ── Multi-steward coordination ─────────────────────────────
-  const [showStewardModal, setShowStewardModal] = useState(true);
-  const [stewardName, setStewardName] = useState('');
-  const [stewardRole, setStewardRole] = useState('MAIN');
+  // ── Auth + Multi-steward coordination ───────────────────────
+  const [showLoginModal, setShowLoginModal] = useState(() => {
+    // Auto-login if we have a saved token
+    try {
+      const savedToken = localStorage.getItem('bpr-auth-token');
+      const savedSteward = JSON.parse(localStorage.getItem('bpr-auth-steward') || 'null');
+      if (savedToken && savedSteward) {
+        // Will validate on connect
+        return false;
+      }
+    } catch {}
+    return true;
+  });
+  const [authToken, setAuthToken] = useState(() => {
+    try { return localStorage.getItem('bpr-auth-token') || ''; } catch { return ''; }
+  });
+  const [stewardName, setStewardName] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bpr-auth-steward') || '{}').name || ''; } catch { return ''; }
+  });
+  const [stewardRole, setStewardRole] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bpr-auth-steward') || '{}').role || 'MAIN'; } catch { return 'MAIN'; }
+  });
   const [connectedStewards, setConnectedStewards] = useState([]);
   const [incidentLocks, setIncidentLocks] = useState({}); // incidentId → { stewardName, ... }
 
@@ -332,13 +350,31 @@ export function App() {
     setIncidents((prev) => [...prev, incident]);
   }, []);
 
-  // ── Steward identity ─────────────────────────────────────
-  const handleStewardJoin = useCallback(({ name, role }) => {
-    setStewardName(name);
-    setStewardRole(role);
-    setShowStewardModal(false);
-    wsClient.send('steward:hello', { name, role });
+  // ── Auth: login handler ────────────────────────────────────
+  const handleLogin = useCallback(({ token, steward }) => {
+    setAuthToken(token);
+    setStewardName(steward.name);
+    setStewardRole(steward.role);
+    setShowLoginModal(false);
+    wsClient.setToken(token);
   }, []);
+
+  // Auto-connect if we have a saved token
+  useEffect(() => {
+    if (authToken && !showLoginModal) {
+      wsClient.setToken(authToken);
+    }
+
+    // Listen for auth failure — show login modal again
+    const unsub = wsClient.on('auth:failed', () => {
+      setShowLoginModal(true);
+      setAuthToken('');
+      try { localStorage.removeItem('bpr-auth-token'); } catch {}
+      try { localStorage.removeItem('bpr-auth-steward'); } catch {}
+    });
+
+    return unsub;
+  }, [authToken, showLoginModal]);
 
   // ── Incident review with locking ─────────────────────────
   const reviewIncident = useCallback((incident) => {
@@ -504,8 +540,8 @@ export function App() {
 
   return (
     <div style={styles.app}>
-      {/* Steward identity modal */}
-      {showStewardModal && <StewardModal onSubmit={handleStewardJoin} />}
+      {/* Login modal */}
+      {showLoginModal && <StewardModal onLogin={handleLogin} />}
 
       {/* Header */}
       <div style={styles.header}>

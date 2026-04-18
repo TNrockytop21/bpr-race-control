@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+const AUTH_BASE = 'https://racecontrol.bitepointracing.com';
+
 const styles = {
   overlay: {
     position: 'fixed',
@@ -50,19 +52,6 @@ const styles = {
     marginBottom: '18px',
     boxSizing: 'border-box',
   },
-  select: {
-    width: '100%',
-    background: '#111',
-    border: '1px solid #2a2a2a',
-    borderRadius: '4px',
-    color: '#eee',
-    padding: '10px 12px',
-    fontSize: '14px',
-    outline: 'none',
-    marginBottom: '28px',
-    boxSizing: 'border-box',
-    cursor: 'pointer',
-  },
   button: {
     width: '100%',
     background: '#c8102e',
@@ -79,24 +68,64 @@ const styles = {
     opacity: 0.4,
     cursor: 'not-allowed',
   },
-  roleHint: {
-    color: '#555',
-    fontSize: '10px',
-    marginTop: '-14px',
-    marginBottom: '24px',
+  error: {
+    color: '#ef4444',
+    fontSize: '12px',
+    marginBottom: '16px',
+    padding: '8px 12px',
+    background: 'rgba(239,68,68,0.1)',
+    border: '1px solid rgba(239,68,68,0.2)',
+    borderRadius: '4px',
+  },
+  loading: {
+    color: '#888',
+    fontSize: '12px',
+    textAlign: 'center',
+    marginBottom: '16px',
   },
 };
 
-export function StewardModal({ onSubmit }) {
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('MAIN');
+export function StewardModal({ onLogin }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const canSubmit = name.trim().length > 0;
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !loading;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (canSubmit) {
-      onSubmit({ name: name.trim(), role });
+    if (!canSubmit) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(`${AUTH_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        setError(data.error || 'Login failed');
+        setLoading(false);
+        return;
+      }
+
+      // Save token and pass to app
+      try { localStorage.setItem('bpr-auth-token', data.token); } catch {}
+      try { localStorage.setItem('bpr-auth-steward', JSON.stringify(data.steward)); } catch {}
+
+      onLogin({
+        token: data.token,
+        steward: data.steward,
+      });
+    } catch (err) {
+      setError('Could not reach server: ' + err.message);
+      setLoading(false);
     }
   };
 
@@ -104,29 +133,31 @@ export function StewardModal({ onSubmit }) {
     <div style={styles.overlay}>
       <form style={styles.modal} onSubmit={handleSubmit}>
         <div style={styles.title}>BPR RACE CONTROL</div>
-        <div style={styles.subtitle}>Identify yourself to begin stewarding</div>
+        <div style={styles.subtitle}>Steward Login</div>
 
-        <label style={styles.label}>Your Name</label>
+        {error && <div style={styles.error}>{error}</div>}
+        {loading && <div style={styles.loading}>Authenticating...</div>}
+
+        <label style={styles.label}>Email</label>
         <input
           style={styles.input}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. John Smith"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="steward@bitepointracing.com"
           autoFocus
+          disabled={loading}
         />
 
-        <label style={styles.label}>Role</label>
-        <select
-          style={styles.select}
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        >
-          <option value="MAIN">Main Steward</option>
-          <option value="SUPPORT">Support Steward</option>
-        </select>
-        <div style={styles.roleHint}>
-          Main steward has primary authority. Support steward assists with review.
-        </div>
+        <label style={styles.label}>Password</label>
+        <input
+          style={styles.input}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Enter your password"
+          disabled={loading}
+        />
 
         <button
           type="submit"
@@ -136,7 +167,7 @@ export function StewardModal({ onSubmit }) {
           }}
           disabled={!canSubmit}
         >
-          JOIN SESSION
+          {loading ? 'LOGGING IN...' : 'LOGIN'}
         </button>
       </form>
     </div>

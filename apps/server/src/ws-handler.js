@@ -4,6 +4,9 @@ import { MSG } from './protocol.js';
 import { loadProfile } from './profiles.js';
 import { savePlan, loadPlan, listPlans, deletePlan } from './race-plans.js';
 import { recorder } from './session-recorder.js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const auth = require('./auth.js');
 
 let agentCounter = 0;
 
@@ -357,19 +360,10 @@ function broadcastToStewards(type, payload) {
 
 export function handleStewardConnection(ws, req) {
   const stewardId = `steward-${++stewardCounter}`;
+  let authenticated = false;
+  let stewardInfo = null;
 
-  // Stewards are viewers with extra privileges — register in the same store
-  store.addViewer(ws);
-  store.subscribeAll(ws);
-
-  sendToViewer(ws, MSG.SESSION_SNAPSHOT, store.getSnapshot());
-
-  const stints = store.getStints();
-  if (stints.length > 0) sendToViewer(ws, MSG.STINT_LIST, { stints });
-  const events = store.getEventLog();
-  if (events.length > 0) sendToViewer(ws, MSG.EVENT_LOG, { events });
-
-  console.log('[steward] connected');
+  console.log('[steward] connection opened — awaiting auth');
 
   ws.on('message', (raw) => {
     let msg;
@@ -381,19 +375,89 @@ export function handleStewardConnection(ws, req) {
 
     const { type, payload } = msg;
 
-    switch (type) {
-      // Steward identity
-      case MSG.STEWARD_HELLO: {
-        const name = payload.name || `Steward ${stewardCounter}`;
-        const role = payload.role || 'main';
-        stewards.set(ws, { id: stewardId, name, role, connectedAt: Date.now() });
+    // ── Auth gate: must authenticate before anything else ──
+    if (!authenticated) {
+      if (type === 'auth:token') {
+        const token = payload?.token;
+        if (!token) {
+          ws.send(JSON.stringify({ type: 'auth:failed', payload: { error: 'No token provided' } }));
+          ws.close();
+          return;
+        }
+
+        const decoded = auth.verifyToken(token);
+        if (!decoded) {
+          ws.send(JSON.stringify({ type: 'auth:failed', payload: { error: 'Invalid or expired token' } }));
+          ws.close();
+          return;
+        }
+
+        // Auth successful — set up steward
+        authenticated = true;
+        stewardInfo = { id: decoded.stewardId, name: decoded.name, role: decoded.role };
+
+        // Register as viewer to receive race data
+        store.addViewer(ws);
+        store.subscribeAll(ws);
+        sendToViewer(ws, MSG.SESSION_SNAPSHOT, store.getSnapshot());
+
+        const stints = store.getStints();
+        if (stints.length > 0) sendToViewer(ws, MSG.STINT_LIST, { stints });
+        const events = store.getEventLog();
+        if (events.length > 0) sendToViewer(ws, MSG.EVENT_LOG, { events });
+
+        // Register in stewards roster
+        stewards.set(ws, { ...stewardInfo, connectedAt: Date.now() });
         broadcastToStewards(MSG.STEWARD_LIST, {
           stewards: [...stewards.values()],
           locks: Object.fromEntries(incidentLocks),
         });
-        console.log(`[steward] ${name} (${role}) identified as ${stewardId}`);
-        break;
+
+        ws.send(JSON.stringify({
+          type: 'auth:ok',
+          payload: { steward: stewardInfo },
+        }));
+
+        console.log(`[steward] ${stewardInfo.name} (${stewardInfo.role}) authenticated`);
+        return;
       }
+
+      // Legacy support: if client sends steward:hello instead of auth:token,
+      // allow it (for backward compatibility during transition)
+      if (type === MSG.STEWARD_HELLO) {
+        authenticated = true;
+        const name = payload.name || `Steward ${stewardCounter}`;
+        const role = payload.role || 'MAIN';
+        stewardInfo = { id: stewardId, name, role };
+
+        store.addViewer(ws);
+        store.subscribeAll(ws);
+        sendToViewer(ws, MSG.SESSION_SNAPSHOT, store.getSnapshot());
+
+        const stints = store.getStints();
+        if (stints.length > 0) sendToViewer(ws, MSG.STINT_LIST, { stints });
+        const events = store.getEventLog();
+        if (events.length > 0) sendToViewer(ws, MSG.EVENT_LOG, { events });
+
+        stewards.set(ws, { ...stewardInfo, connectedAt: Date.now() });
+        broadcastToStewards(MSG.STEWARD_LIST, {
+          stewards: [...stewards.values()],
+          locks: Object.fromEntries(incidentLocks),
+        });
+        console.log(`[steward] ${name} (${role}) identified via legacy hello (no auth)`);
+        return;
+      }
+
+      // Not authenticated and not an auth message — ignore
+      ws.send(JSON.stringify({ type: 'auth:required', payload: { error: 'Send auth:token first' } }));
+      return;
+    }
+
+    // ── Authenticated — process normal steward messages ──
+    switch (type) {
+      // Legacy hello (already authenticated, ignore)
+      case MSG.STEWARD_HELLO:
+        break;
 
       // Incident locking (prevent double-handling)
       case MSG.STEWARD_LOCK_INCIDENT: {
