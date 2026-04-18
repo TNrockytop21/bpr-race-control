@@ -12,7 +12,9 @@
  * Run on the droplet: cd /opt/bpr-telemetry && node apps/server/src/admin-cli.js <command>
  */
 
-const db = require('./stewards-db');
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const db = require('./stewards-db.js');
 
 const args = process.argv.slice(2);
 const command = args[0];
