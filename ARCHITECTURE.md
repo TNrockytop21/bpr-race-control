@@ -308,6 +308,42 @@ Vite + React web app served at `https://racecontrol.bitepointracing.com`. Connec
 
 Reuses `TrackMap.jsx` from `components/track/` for live car positions.
 
+### Analytics Components (4)
+
+| Component | What it shows |
+|-----------|--------------|
+| `GapChart.jsx` | Gap-to-leader over time (Recharts line chart). Lines converging = battle forming. ~5 min rolling window. |
+| `PositionTracker.jsx` | Position changes over time (Recharts step-line). Crossing lines = overtake. |
+| `StintAnalysis.jsx` | Lap-by-lap pace chart. Shows tire degradation. Purple dashed line = session best. |
+| `SectorComparison.jsx` | Head-to-head sector bars (S1/S2/S3). Grouped per sector, up to 4 drivers. |
+
+All four use Recharts for rendering and accept `?drivers=` and `?max=` query params when used as overlays.
+
+### OBS Overlay Routing
+
+12 overlay URLs served under `/overlay/*` with `transparent` body background for OBS Browser Source:
+
+| Category | Paths |
+|----------|-------|
+| Analytics | `/overlay/gaps`, `/overlay/positions`, `/overlay/stints`, `/overlay/sectors` |
+| Race Data | `/overlay/tower`, `/overlay/ticker`, `/overlay/battle` |
+| Telemetry | `/overlay/telemetry`, `/overlay/compare`, `/overlay/laptrace`, `/overlay/h2h` |
+| Full-Lap Trace | `/overlay/trace` |
+
+Query params: `?drivers=Name1,Name2` to filter, `?max=N` to limit driver count, `?theme=light` for opaque background.
+
+### Spectator Page (`/live`)
+
+Public viewer page where spectators pick a driver and see live telemetry. Includes a `LiveTelemetryGraph` (canvas-based full-lap trace), live stats, sector times, lap history, and event feed. No steward controls.
+
+### LiveTelemetryGraph
+
+Canvas-rendered full-lap telemetry trace. X-axis = track distance (0-100%), Y-axis = throttle (green), brake (red), speed (blue), steering (yellow). Current position marker moves along the trace. Live speed/gear readout overlay. Data sourced from `telemetry-buffer.js` `getCurrentLapFrames()`.
+
+### Post-Race PDF Report
+
+Export PDF button on the Driver Summary tab. Generates a professional formatted PDF using jsPDF: red BPR header, stat cards (laps/incidents/penalties/protests), driver summary table, incident log, and penalty decision cards.
+
 ---
 
 ## 5. Message Protocol (`protocol.js`)
@@ -452,10 +488,24 @@ The Electron main process calls `irsdk-bridge.exe` (a C# tool using Windows `Sen
 | `irsdk:replay:camera` | `camera <carIdx> <group>` | `BroadcastMsg(CamSwitchNum, carIdx+1, camGroup)` |
 | `irsdk:replay:search` | `replay-search <mode>` | `BroadcastMsg(ReplaySearch, mode)` |
 | `irsdk:status` | `status` | Process detection (`iRacingSim64DX11`) |
+| `irsdk:chat` | `chat <text>` | `SendInput` keystrokes to iRacing chat box |
 
 Camera names mapped to group numbers: `nose`(1), `cockpit`(10), `chase`(5), `farchase`(6), `rearchase`(17), `chopper`(16), `blimp`(15), `tv1-3`(11-13), `scenic`(14), `pitlane`(18).
 
 Search modes: `start`, `end`, `prev-incident`, `next-incident`, `prev-lap`, `next-lap`.
+
+### iRacing Admin Commands (via chat)
+
+The `chat` command sends arbitrary text to iRacing's in-game chat using `SendInput` keystrokes. This powers penalty enforcement and race control messaging without native SDK admin APIs.
+
+| Action | Chat command sent | Triggered by |
+|--------|------------------|-------------|
+| Drive-Through penalty | `!black #<carNum>` | Penalty confirm (DT) |
+| Stop & Go penalty | `!black #<carNum>` | Penalty confirm (SG) |
+| DSQ | `!dq #<carNum>` | Penalty confirm (DSQ) |
+| Clear Penalty | `!clear #<carNum>` | Clear Penalty button |
+| RC Message | `/all [RC] <message>` | Race Control message send |
+| Throw Caution | `!yellow` | Throw Caution button |
 
 ---
 
@@ -511,10 +561,11 @@ apps/steward/
   package.json          Build scripts (dev/pack/dist)
 
 apps/web/
-  src/pages/            BroadcastDashboard
+  src/pages/            BroadcastDashboard, SpectatorPage (/live)
   src/components/broadcast/  5 broadcast components
+  src/components/analytics/  GapChart, PositionTracker, StintAnalysis, SectorComparison
   src/components/track/      TrackMap
-  src/components/live/       Reusable telemetry components
+  src/components/live/       Reusable telemetry components, LiveTelemetryGraph
   src/context/          SessionContext, TelemetryContext, ThemeContext
   src/hooks/            useAnimationFrame, useFullscreen, etc.
   src/lib/              ws-client, telemetry-buffer, utils

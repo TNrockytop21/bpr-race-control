@@ -92,6 +92,7 @@ Each overlay is a standalone page with transparent background designed for OBS B
 | `/overlay/compare?drivers=D.Newman,A.Riegel` | Side-by-side telemetry cards for two drivers | 740 x 250 |
 | `/overlay/laptrace?drivers=D.Newman` | Current vs best lap — sector-by-sector delta with +/- time | 400 x 300 |
 | `/overlay/h2h?drivers=D.Newman,A.Riegel` | Head-to-head comparison — gap, best/last lap, sector chart | 450 x 350 |
+| `/overlay/trace?drivers=D.Newman` | Full-lap telemetry graph — throttle/brake/speed/steer by track distance | 800 x 400 |
 
 #### Race Data
 
@@ -141,6 +142,24 @@ https://racecontrol.bitepointracing.com/overlay/tower?max=20
 - Full comparison card: gap, positions, best/last laps
 - Sector-by-sector line chart
 - Shows exactly where each driver is faster
+
+**Full-lap trace** (`/overlay/trace?drivers=D.Newman`):
+- Canvas-rendered graph: X = track distance (0-100%), overlaid lines for throttle (green), brake (red), speed (blue), steering (yellow)
+- Current position marker moves along the trace in real time
+- Live speed and gear readout
+- Great for showing driver technique — where they brake, where they get on the throttle
+
+---
+
+## Spectator Page (`/live`)
+
+A public page where viewers can follow a specific driver's live telemetry. No login required.
+
+1. Open `https://racecontrol.bitepointracing.com/live`
+2. Pick a driver from the dropdown
+3. See their live telemetry graph (full lap by track distance), stats, sector times, lap history, and events
+
+Good for sharing with fans who want to follow a specific driver during the race.
 
 ---
 
@@ -258,6 +277,8 @@ Open different overlay URLs on different monitors:
 | `/overlay/compare` | Side-by-side telemetry comparison |
 | `/overlay/laptrace` | Current vs best lap comparison |
 | `/overlay/h2h` | Head-to-head driver comparison |
+| `/overlay/trace` | Full-lap telemetry graph (throttle/brake/speed/steer by track distance) |
+| `/live` | Spectator page — pick a driver, see live telemetry graph, stats, laps, events |
 
 ---
 

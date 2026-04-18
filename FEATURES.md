@@ -555,7 +555,107 @@ python bots.py --gt3 10 --lmp2 5  # smaller field for lighter testing
 | `replay-play` | Resumes replay at 1x |
 | `replay-search <mode>` | Search to start/end/prev-incident/next-incident/prev-lap/next-lap |
 | `camera <carIdx> <group>` | Switches camera to a specific car and view |
+| `chat <text>` | Sends text to iRacing chat via `SendInput` (admin commands, RC messages) |
 
 **Camera groups:** `nose`(1), `cockpit`(10), `chase`(5), `farchase`(6), `rearchase`(17), `chopper`(16), `blimp`(15), `tv1-3`(11-13), `scenic`(14), `pitlane`(18), or numeric group ID.
 
 **Output:** All commands return JSON to stdout for Electron to parse: `{"ok":true,"action":"replay-jump","sessionTime":123.45}`
+
+---
+
+### 29. iRacing Admin Commands
+
+**What it does:** Enforces penalties and sends race control messages directly in iRacing's game session via the `chat` command on `irsdk-bridge.exe`. Uses `SendInput` to type into iRacing's chat box.
+
+**Penalty enforcement:**
+| Penalty type | iRacing chat command |
+|-------------|---------------------|
+| Drive-Through | `!black #<carNum>` |
+| Stop & Go | `!black #<carNum>` |
+| DSQ | `!dq #<carNum>` |
+
+**Clear Penalty:** A "Clear Penalty" button sends `!clear #<carNum>` to remove an in-game black flag.
+
+**Race Control messages:** RC messages are also sent to iRacing chat as `/all [RC] <message>`, so all drivers see the message in-game regardless of plugin status.
+
+**Throw Caution:** A dedicated button sends `!yellow` to trigger a full-course caution in iRacing.
+
+**Requirement:** The steward must be an admin in the iRacing session for `!black`, `!dq`, `!clear`, and `!yellow` commands to take effect.
+
+---
+
+### 30. Post-Race PDF Report
+
+**What it does:** An "Export PDF" button on the Driver Summary tab generates a professional formatted race report using jsPDF.
+
+**PDF contents:**
+- Red BPR-branded header with race title and track name
+- Stat cards: total laps, incidents, penalties issued, protests filed
+- Driver summary table: laps, contacts, off-tracks, blue flags, incident points, penalties per driver
+- Incident log: timestamped list of all incidents with type, drivers, and status
+- Penalty decision cards: each penalty with type, driver, steward notes, and issuing steward
+
+**Format:** Single-page or multi-page PDF, auto-named with track and date. Downloaded directly in the browser.
+
+---
+
+## BROADCAST ANALYTICS
+
+### 31. Gap Chart
+
+**What it shows:** Gap-to-leader over time as a Recharts line chart. Leader is always at 0. Lines converging indicate a battle forming. Data accumulates over ~5 minutes then rolls off.
+
+**Use for commentary:** Visualize pace differences and closing battles.
+
+### 32. Position Tracker
+
+**What it shows:** Position changes over time as a Recharts step-line chart. Each driver is a line, Y-axis is race position (P1 at top). Crossing lines indicate overtakes.
+
+**Use for commentary:** Show who has gained or lost the most positions over a stint.
+
+### 33. Stint Analysis
+
+**What it shows:** Lap-by-lap pace chart. Purple dashed line marks the session's overall best lap. Rising lines indicate tire degradation, flat lines indicate consistent pace.
+
+**Use for commentary:** Compare race pace between drivers, identify tire drop-off.
+
+### 34. Sector Comparison
+
+**What it shows:** Head-to-head sector bars (S1/S2/S3). Grouped bars per sector for up to 4 drivers. Taller bar = slower sector.
+
+**Use for commentary:** Pinpoint exactly where one driver is faster than another.
+
+---
+
+## OBS OVERLAYS
+
+### 35. OBS Overlay System
+
+**What it is:** 12 standalone overlay pages at `/overlay/*` with transparent backgrounds designed for OBS Browser Source. Each page auto-connects to the server and updates live.
+
+**Analytics overlays:** `/overlay/gaps`, `/overlay/positions`, `/overlay/stints`, `/overlay/sectors`
+
+**Race data overlays:** `/overlay/tower`, `/overlay/ticker`, `/overlay/battle`
+
+**Telemetry overlays:** `/overlay/telemetry`, `/overlay/compare`, `/overlay/laptrace`, `/overlay/h2h`
+
+**Full-lap trace overlay:** `/overlay/trace` — canvas-rendered full-lap telemetry graph showing throttle/brake/speed/steering by track distance.
+
+**Query params:** `?drivers=Name1,Name2` to filter to specific drivers, `?max=N` to limit count, `?theme=light` for opaque background.
+
+---
+
+## SPECTATOR FEATURES
+
+### 36. Spectator Live Page (`/live`)
+
+**What it is:** A public viewer page where spectators pick a driver and see their live telemetry, stats, and race data. No steward controls.
+
+**What it shows:**
+- **LiveTelemetryGraph** — canvas-based full-lap trace: X = track distance (0-100%), overlaid throttle (green), brake (red), speed (blue), steering (yellow) lines. A position marker moves along the trace showing where the driver is on track. Live speed and gear readout.
+- **Live stats** — current position, best/last lap, incident count
+- **Sector times** — S1/S2/S3 with personal best and overall best coloring
+- **Lap history** — scrollable list of recent laps with times
+- **Event feed** — incidents, penalties, RC messages affecting the selected driver
+
+**Data source:** `LiveTelemetryGraph` uses `telemetry-buffer.js` `getCurrentLapFrames()` to render the current lap's trace in real time.
