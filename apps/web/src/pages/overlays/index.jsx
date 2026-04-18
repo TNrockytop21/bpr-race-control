@@ -12,6 +12,8 @@ import { IncidentFeed } from '../../components/broadcast/IncidentFeed';
 import { BattleTracker } from '../../components/broadcast/BattleTracker';
 import { TelemetryOverlayCard, TelemetryCompare } from '../../components/analytics/TelemetryOverlayCard';
 import { LapTraceComparison, DriverVsDriver } from '../../components/analytics/LapTraceComparison';
+import { LiveTelemetryGraph } from '../../components/analytics/LiveTelemetryGraph';
+import { useSession } from '../../context/SessionContext';
 
 export function GapOverlay() {
   const { driverFilter, maxDrivers } = useOutletContext();
@@ -95,6 +97,27 @@ export function HeadToHeadOverlay() {
   return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px' }}>
       <DriverVsDriver driverAName={driverA} driverBName={driverB} />
+    </div>
+  );
+}
+
+export function LiveTraceOverlay() {
+  const { driverFilter } = useOutletContext();
+  const { drivers } = useSession();
+  const driverName = driverFilter?.[0] || null;
+  const driver = driverName
+    ? Object.values(drivers).find((d) => d.name === driverName)
+    : Object.values(drivers).find((d) => d.connected);
+
+  return (
+    <div style={{ height: '100vh', width: '100%' }}>
+      {driver ? (
+        <LiveTelemetryGraph driverId={driver.id} height={window.innerHeight || 400} />
+      ) : (
+        <div style={{ color: '#555', padding: '20px', textAlign: 'center' }}>
+          Waiting for driver... (add ?drivers=Name to URL)
+        </div>
+      )}
     </div>
   );
 }

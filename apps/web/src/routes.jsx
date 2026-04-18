@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { BroadcastDashboard } from './pages/BroadcastDashboard';
+import { SpectatorPage } from './pages/SpectatorPage';
 import { OverlayShell } from './layouts/OverlayShell';
 import {
   GapOverlay,
@@ -14,6 +15,7 @@ import {
   TelemetryCompareOverlay,
   LapCompareOverlay,
   HeadToHeadOverlay,
+  LiveTraceOverlay,
 } from './pages/overlays/index';
 
 export const router = createBrowserRouter([
@@ -23,6 +25,7 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <BroadcastDashboard /> },
+      { path: 'live', element: <SpectatorPage /> },
     ],
   },
 
@@ -43,6 +46,7 @@ export const router = createBrowserRouter([
       { path: 'compare',  element: <TelemetryCompareOverlay /> }, // Side by side telemetry
       { path: 'laptrace', element: <LapCompareOverlay /> },   // Current vs best lap
       { path: 'h2h',      element: <HeadToHeadOverlay /> },   // Head to head comparison
+      { path: 'trace',    element: <LiveTraceOverlay /> },   // Full-lap telemetry graph
     ],
   },
 ]);
