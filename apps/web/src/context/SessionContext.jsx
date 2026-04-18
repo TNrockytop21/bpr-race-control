@@ -4,6 +4,8 @@ import { wsClient } from '../lib/ws-client';
 const SessionContext = createContext(null);
 const SessionDispatchContext = createContext(null);
 
+const MAX_GAP_HISTORY = 600; // ~5 min at 2Hz
+
 const initialState = {
   connected: false,
   sessionInfo: null,
@@ -14,6 +16,7 @@ const initialState = {
   events: [],
   profiles: {},
   standings: [],
+  gapHistory: [], // { time, drivers: { [name]: { pos, gap, interval } } }
 };
 
 function sessionReducer(state, action) {
@@ -139,8 +142,22 @@ function sessionReducer(state, action) {
     case 'PROFILE_UPDATED':
       return { ...state, profiles: { ...state.profiles, [action.payload.driverId]: action.payload.profile } };
 
-    case 'STANDINGS':
-      return { ...state, standings: action.payload };
+    case 'STANDINGS': {
+      // Accumulate gap history for analytics
+      const snapshot = { time: Date.now(), drivers: {} };
+      for (const s of action.payload) {
+        if (s.name) {
+          snapshot.drivers[s.name] = {
+            pos: s.pos,
+            gap: s.gap || 0,
+            interval: s.interval || 0,
+          };
+        }
+      }
+      const history = [...state.gapHistory, snapshot];
+      if (history.length > MAX_GAP_HISTORY) history.shift();
+      return { ...state, standings: action.payload, gapHistory: history };
+    }
 
     default:
       return state;
