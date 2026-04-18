@@ -14,10 +14,11 @@ live race, review incidents, issue penalties, control iRacing's
 in-game replay, and communicate decisions back to drivers — all from
 one integrated interface.
 
-The existing telemetry pipeline already works: each driver runs a
-Python agent on their PC that reads iRacing shared memory via
-`pyirsdk` and streams telemetry over a websocket to a DigitalOcean
-droplet. We are building race control on top of that pipeline.
+The telemetry pipeline is fully operational: each driver runs a
+SimHub plugin (C# .dll) that reads iRacing telemetry via SimHub's
+data pipeline and streams it over websocket to a DigitalOcean
+droplet. A legacy Python agent also exists but is deprecated.
+The SimHub plugin auto-updates via GitHub releases.
 
 There is no team dashboard in this project. Team-facing endurance
 features (fuel strategy, stint planning, coaching) have been moved
@@ -30,47 +31,68 @@ iRacing official team special events.
 
 ## Current system
 
-**Droplet:** `45.55.216.21` (ingests and serves websocket traffic)
-**Agent endpoint:** `ws://45.55.216.21/ws/agent`
-**Viewer endpoint:** `ws://45.55.216.21/ws/viewer`
-**Health check:** `http://45.55.216.21/health`
+**Domain:** `racecontrol.bitepointracing.com` (Cloudflare HTTPS/WSS)
+**Droplet IP:** `45.55.216.21` (behind Cloudflare)
+**Agent endpoint:** `wss://racecontrol.bitepointracing.com/ws/agent`
+**Viewer endpoint:** `wss://racecontrol.bitepointracing.com/ws/viewer`
+**Steward endpoint:** `wss://racecontrol.bitepointracing.com/ws/steward`
+**Spectator page:** `https://racecontrol.bitepointracing.com/live`
+**Health check:** `https://racecontrol.bitepointracing.com/health`
+**GitHub:** `github.com/TNrockytop21/bpr-race-control` (public)
 
 ### Repo layout
 ```
-agent/                    Python agent (pyirsdk -> websocket)
-  launcher.py             Tk GUI, asks for name, clicks connect
-  capture.py              read_frame / read_standings / session info
-  protocol.py             message envelope helpers
-  config.py               SERVER_URL, SEND_RATE_HZ, CAPTURE_RATE_HZ
-  requirements.txt        pyirsdk>=1.5.0, websockets>=13.0
+plugins/simhub/BPRRaceControl/  SimHub plugin (C# .dll, primary driver agent)
+  BPRRaceControlPlugin.cs       Main plugin + auto-updater + notifications
+  WebSocketClient.cs            Background websocket manager
+  TelemetryFrameBuilder.cs      SimHub → JSON telemetry mapping
+  StandingsBuilder.cs           Standings from Opponents collection
+  NotificationOverlay.cs        WPF penalty/investigation popups
+  PluginUpdater.cs              GitHub releases auto-update
+  JoystickManager.cs            Wheel button binding via DirectInput
+  SettingsControl.cs            Motorsport-style settings panel
+agent/                          Python agent (legacy, kept for bots)
+  bots.py                       55-car multi-class bot simulator
+  capture.py / protocol.py      iRacing SDK reader + message format
 apps/
-  server/src/             Node + Express + ws
-    main.js               http server, /ws routing, /health
-    ws-handler.js          agent + viewer + steward connection handlers
-    session-store.js      SessionStore (single shared driver pool)
-    broadcast.js          send helpers
-    protocol.js           MSG constants (shared vocabulary)
-    profiles.js           per-driver best-lap profile persistence
-    race-plans.js         saved race plan persistence
-  web/                    Vite frontend (race control observer view)
-  steward/                Electron app (primary steward interface)
-installer/                Inno Setup + PyInstaller build for BPR-Agent.exe
-deploy.sh                 Droplet provisioning (Node 20, nginx, pm2, ufw)
+  server/src/                   Node + Express + ws
+    main.js                     HTTP server, /ws routing, /health
+    ws-handler.js               Agent/viewer/steward handlers + admin
+    session-store.js            SessionStore + blue flag + penalty serving
+    session-recorder.js         NDJSON session persistence
+    protocol.js                 MSG constants (shared vocabulary)
+  web/                          Vite + React broadcast dashboard
+    src/pages/                  BroadcastDashboard, SpectatorPage (/live)
+    src/components/analytics/   GapChart, PositionTracker, StintAnalysis,
+                                SectorComparison, LiveTelemetryGraph,
+                                TelemetryOverlayCard, LapTraceComparison
+    src/components/broadcast/   BroadcastStandings, BattleTracker, etc.
+    src/layouts/OverlayShell.jsx  OBS overlay wrapper (transparent bg)
+    src/pages/overlays/         12 OBS overlay page wrappers
+  steward/                      Electron app (primary steward interface)
+    electron/main.js            IPC handlers for irsdk-bridge.exe
+    electron/irsdk-bridge.exe   C# tool: replay/camera/chat commands
+    electron/irsdk-bridge.cs    Source for bridge (SendInput for chat)
+    local-server.js             LAN server for multi-PC steward setup
+    src/layouts/                SplitView, CommandCenter, PriorityQueue
+    src/components/             13 UI components + StewardModal
+installer/                      Inno Setup for SimHub plugin
+deploy.sh                       Droplet provisioning (Node 20, nginx, pm2)
+BROADCAST_GUIDE.md              Broadcast crew instructions
 ```
 
 ### Current data flow
 
-1. Driver launches `BPR-Agent.exe`, enters name, clicks connect
-2. Agent connects `ws://45.55.216.21/ws/agent`
-3. Agent sends `agent:hello` (driverName, car, trackId, trackName)
-4. Agent sends `agent:frame` at 20Hz (captured at 60Hz internally)
-5. Server adds driver to the single shared `SessionStore`
-6. `SessionStore.updateFrame` buffers samples until lap change, then
-   finalizes the lap: compresses samples into a 1000-bin distance
-   trace. Raw samples are also kept in a per-driver ring buffer
-   (120 seconds) for incident review.
-7. Server broadcasts `telemetry:frame` to all connected viewers
-   and stewards
+1. Driver has SimHub plugin installed (BPRRaceControl.dll)
+2. Plugin auto-connects when iRacing starts
+3. Sends `agent:hello` (auto-detected name, car, track)
+4. Sends `agent:frame` at 20Hz, standings at 2Hz
+5. Server stores in `SessionStore`, broadcasts to viewers/stewards
+6. Steward app receives telemetry, can review incidents with
+   synced replay + telemetry charts + penalty enforcement
+7. Penalties sent both as overlay notifications (via plugin) AND
+   as in-game iRacing admin commands (via irsdk-bridge.exe chat)
+8. All connections encrypted via Cloudflare WSS
 
 ### Telemetry channels captured in `agent/capture.py`
 
@@ -348,8 +370,9 @@ special-events use case.
   a reason.
 - **nginx 60-second default proxy timeout.** Long-lived websockets
   need `proxy_read_timeout 86400`. `deploy.sh` already has this.
-- **Agent changes require redistribution.** Every driver has to
-  download a new build. Batch agent changes.
+- **SimHub plugin auto-updates via GitHub releases.** Bump version
+  in AssemblyInfo.cs, build, create release with DLL attached.
+  Drivers get a green "Update available" banner on next SimHub launch.
 - **iRacing S3 links expire in 120 seconds.** If integrating with
   iRacing's results API, fetch server-side immediately.
 
@@ -363,17 +386,43 @@ special-events use case.
   and client protocol in lockstep.
 - There is a single `SessionStore` instance. No team routing, no
   multi-store pattern.
-- Batch agent changes to minimize redistribution.
-- For the Electron steward app, use one IPC channel per concern
-  (replay commands, session info, incident actions) rather than a
-  monolithic dispatcher.
+- SimHub plugin updates: bump AssemblyInfo.cs version, build,
+  create GitHub release with DLL + bpr-logo.png attached.
+- For the Electron steward app, use one IPC channel per concern.
+  Admin commands go through `irsdk:admin:chat` → irsdk-bridge.exe.
+- Droplet deploy: SSH as root, `cd /opt/bpr-telemetry && git pull
+  && cd apps/web && npm run build && pm2 restart bpr-server`.
+  SSH password in memory file.
+- OBS overlays: add new overlay pages under `/overlay/*` route in
+  `apps/web/src/routes.jsx` with OverlayShell wrapper.
 
 ---
 
-## Current task
+## What's been completed
 
-Remove all team scoping from the server (`TeamManager`, BPR message
-layer, team-based viewer routing) and from the agent (team dropdown,
-`?team=` URL param). Flatten to a single shared driver pool. Then
-strip the web app of team-specific pages and promote the overview
-as the main view.
+- Team scoping removed — single shared driver pool
+- SimHub plugin (replaces Python agent) with auto-updater, wheel
+  binding, notification toggles, motorsport-style settings UI
+- iRacing SDK bridge (replay, camera, admin chat commands)
+- Multi-steward identity + incident locking UI
+- Three selectable steward layouts (Split, Command, Queue, Classic)
+- Local network server for multi-PC steward setup
+- HTTPS/WSS via Cloudflare (racecontrol.bitepointracing.com)
+- Standings smoothing (stable keys, RAF throttle, hysteresis)
+- Contact detection removed (iRacing handles it)
+- Post-race PDF report export
+- 12 OBS overlay pages (analytics + race data + telemetry)
+- Spectator live page with full-lap telemetry graph
+- iRacing admin commands (black flag, clear, DQ, chat, safety car)
+- Broadcast analytics (gap chart, position tracker, stint, sectors)
+
+## Current priorities
+
+1. Individual steward accounts (login, JWT, role-based access)
+2. SimHub Dash Studio overlay (native in-sim HUD)
+3. Audio/TTS notifications (VR support)
+4. Season standings / championship points
+5. Team endurance support (driver swaps)
+6. Code signing cert (stop SmartScreen warnings)
+7. Lower-third broadcast graphics
+8. Test admin commands live with real iRacing session
