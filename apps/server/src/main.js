@@ -1,16 +1,12 @@
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import { createRequire } from 'module';
 import { handleAgentConnection, handleViewerConnection, handleStewardConnection } from './ws-handler.js';
 import { ensureProfilesDir } from './profiles.js';
 import { ensurePlansDir } from './race-plans.js';
 import { ensureSessionsDir } from './session-recorder.js';
-
-// Auth modules use CommonJS (better-sqlite3 requires it)
-const require = createRequire(import.meta.url);
-const stewardsDb = require('./stewards-db.js');
-const auth = require('./auth.js');
+import { verifySteward } from './stewards-db.js';
+import { signToken, verifyToken } from './auth.js';
 
 ensureProfilesDir();
 ensurePlansDir();
@@ -31,12 +27,12 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(400).json({ ok: false, error: 'Email and password required' });
   }
 
-  const steward = stewardsDb.verifySteward(email, password);
+  const steward = verifySteward(email, password);
   if (!steward) {
     return res.status(401).json({ ok: false, error: 'Invalid email or password' });
   }
 
-  const token = auth.signToken(steward.id, steward.name, steward.role);
+  const token = signToken(steward.id, steward.name, steward.role);
   res.json({
     ok: true,
     token,
@@ -50,7 +46,7 @@ app.post('/api/auth/validate', (req, res) => {
     return res.status(400).json({ ok: false, error: 'Token required' });
   }
 
-  const decoded = auth.verifyToken(token);
+  const decoded = verifyToken(token);
   if (!decoded) {
     return res.status(401).json({ ok: false, error: 'Invalid or expired token' });
   }

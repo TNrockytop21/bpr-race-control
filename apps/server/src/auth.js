@@ -3,10 +3,12 @@
  * Signs and verifies tokens for steward authentication.
  */
 
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DATA_DIR = path.join(__dirname, '..', '..', '..', 'data');
 const SECRET_FILE = path.join(DATA_DIR, '.jwt-secret');
@@ -65,4 +67,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { signToken, verifyToken };
+export { signToken, verifyToken };

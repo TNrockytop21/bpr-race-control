@@ -4,11 +4,13 @@
  * Admin creates accounts via admin-cli.js.
  */
 
-const Database = require('better-sqlite3');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const path = require('path');
-const fs = require('fs');
+import Database from 'better-sqlite3';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DATA_DIR = path.join(__dirname, '..', '..', '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'stewards.db');
@@ -114,7 +116,7 @@ function updateRole(email, role) {
   return result.changes > 0;
 }
 
-module.exports = {
+export {
   createSteward,
   getStewardByEmail,
   getStewardById,

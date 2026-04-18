@@ -4,9 +4,7 @@ import { MSG } from './protocol.js';
 import { loadProfile } from './profiles.js';
 import { savePlan, loadPlan, listPlans, deletePlan } from './race-plans.js';
 import { recorder } from './session-recorder.js';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const auth = require('./auth.js');
+import { verifyToken } from './auth.js';
 
 let agentCounter = 0;
 
@@ -385,7 +383,7 @@ export function handleStewardConnection(ws, req) {
           return;
         }
 
-        const decoded = auth.verifyToken(token);
+        const decoded = verifyToken(token);
         if (!decoded) {
           ws.send(JSON.stringify({ type: 'auth:failed', payload: { error: 'Invalid or expired token' } }));
           ws.close();
