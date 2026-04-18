@@ -81,7 +81,7 @@ const styles = {
   },
 };
 
-export function PenaltyPanel({ incident, drivers, onResolve, onCancel }) {
+export function PenaltyPanel({ incident, drivers, onResolve, onCancel, onClearPenalty }) {
   const [selectedType, setSelectedType] = useState(null);
   const [timeSeconds, setTimeSeconds] = useState('');
   const [notes, setNotes] = useState('');
@@ -162,6 +162,20 @@ export function PenaltyPanel({ incident, drivers, onResolve, onCancel }) {
         >
           Cancel
         </button>
+        {onClearPenalty && (
+          <button
+            style={{ ...styles.btn, background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
+            onClick={() => {
+              if (confirm('Clear all in-game penalties for involved drivers?')) {
+                for (const driverId of incident.involvedDrivers) {
+                  onClearPenalty(driverId);
+                }
+              }
+            }}
+          >
+            Clear In-Game Penalty
+          </button>
+        )}
         <button
           style={{
             ...styles.btn,

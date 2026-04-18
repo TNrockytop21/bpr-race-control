@@ -29,6 +29,7 @@ const browserIrsdk = {
   replayCamera: (carIdx, camGroup) => apiCall(`camera/${carIdx}/${camGroup}`),
   replaySearch: (mode) => apiCall(`replay-search/${mode}`),
   getStatus: () => apiCall('status'),
+  adminChat: (message) => apiCall(`chat/${encodeURIComponent(message)}`),
 };
 
 /**

@@ -7,22 +7,36 @@
 //   irsdk-bridge.exe replay-pause
 //   irsdk-bridge.exe replay-play
 //   irsdk-bridge.exe camera <carIdx> <camGroupName>
+//   irsdk-bridge.exe chat "<message>"
 //   irsdk-bridge.exe status
+//
+// Admin commands via chat:
+//   irsdk-bridge.exe chat "!black #12"
+//   irsdk-bridge.exe chat "!clear #12"
+//   irsdk-bridge.exe chat "!dq #5"
+//   irsdk-bridge.exe chat "/all Yellow flag — Turn 3"
+//   irsdk-bridge.exe chat "!yellow"
 //
 // Returns JSON to stdout for Electron to parse.
 
 using System;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using System.Threading;
 
 class IRSDKBridge
 {
-    // iRacing BroadcastMsg IDs
+    // iRacing BroadcastMsg IDs (from irsdk_defines.h)
     const int BroadcastCamSwitchNum = 0;
     const int BroadcastReplaySetPlaySpeed = 1;
     const int BroadcastReplaySetPlayPosition = 2;
     const int BroadcastReplaySearch = 3;
     const int BroadcastReplaySetState = 4;
+
+    // Chat command (note: SDK has typo "Comand")
+    const int BroadcastChatComand = 8;
+    const int ChatCommand_BeginChat = 1;
+    const int ChatCommand_Cancel = 3;
 
     // ReplaySearchMode
     const int ReplaySearchToStart = 0;
@@ -55,6 +69,47 @@ class IRSDKBridge
 
     [DllImport("user32.dll", SetLastError = true)]
     static extern bool SendNotifyMessage(IntPtr hWnd, uint msg, uint wParam, uint lParam);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+    [DllImport("user32.dll")]
+    static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr GetForegroundWindow();
+
+    // SendInput structures
+    [StructLayout(LayoutKind.Sequential)]
+    struct INPUT
+    {
+        public uint type;
+        public INPUTUNION u;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    struct INPUTUNION
+    {
+        [FieldOffset(0)] public KEYBDINPUT ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    const uint INPUT_KEYBOARD = 1;
+    const uint KEYEVENTF_UNICODE = 0x0004;
+    const uint KEYEVENTF_KEYUP = 0x0002;
+    const ushort VK_RETURN = 0x0D;
 
     static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
 
@@ -260,9 +315,100 @@ class IRSDKBridge
                 break;
             }
 
+            case "chat":
+            {
+                if (args.Length < 2)
+                {
+                    Console.WriteLine("{\"ok\":false,\"error\":\"Missing message text\"}");
+                    return;
+                }
+                // Join all remaining args as the message (handles spaces)
+                string message = string.Join(" ", args, 1, args.Length - 1);
+
+                // Save current foreground window so we can restore it
+                IntPtr prevWindow = GetForegroundWindow();
+
+                // 1. Open iRacing's chat input via BroadcastMsg
+                SendBroadcast(BroadcastChatComand, ChatCommand_BeginChat, 0, 0);
+                Thread.Sleep(150); // Wait for chat input to open
+
+                // 2. Focus iRacing window
+                IntPtr hwnd = FindWindow("SimGameWindow", null);
+                if (hwnd == IntPtr.Zero)
+                {
+                    // Try alternate class name
+                    hwnd = FindWindow("SimDeviceWindow", null);
+                }
+                if (hwnd != IntPtr.Zero)
+                {
+                    SetForegroundWindow(hwnd);
+                    Thread.Sleep(50);
+                }
+
+                // 3. Type the message using SendInput with UNICODE flag
+                SendText(message);
+                Thread.Sleep(30);
+
+                // 4. Press Enter to send
+                SendKey(VK_RETURN);
+                Thread.Sleep(50);
+
+                // 5. Restore previous foreground window
+                if (prevWindow != IntPtr.Zero && prevWindow != hwnd)
+                {
+                    SetForegroundWindow(prevWindow);
+                }
+
+                // Escape any quotes in message for JSON output
+                string safeMsg = message.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                Console.WriteLine("{\"ok\":true,\"action\":\"chat\",\"message\":\"" + safeMsg + "\"}");
+                break;
+            }
+
             default:
                 Console.WriteLine("{\"ok\":false,\"error\":\"Unknown command: " + cmd + "\"}");
                 break;
         }
+    }
+
+    // ── SendInput helpers ────────────────────────────────────
+
+    /// <summary>Type a string using SendInput with KEYEVENTF_UNICODE.</summary>
+    static void SendText(string text)
+    {
+        foreach (char c in text)
+        {
+            INPUT[] inputs = new INPUT[2];
+
+            // Key down
+            inputs[0].type = INPUT_KEYBOARD;
+            inputs[0].u.ki.wVk = 0;
+            inputs[0].u.ki.wScan = (ushort)c;
+            inputs[0].u.ki.dwFlags = KEYEVENTF_UNICODE;
+
+            // Key up
+            inputs[1].type = INPUT_KEYBOARD;
+            inputs[1].u.ki.wVk = 0;
+            inputs[1].u.ki.wScan = (ushort)c;
+            inputs[1].u.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+
+            SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
+        }
+    }
+
+    /// <summary>Press and release a virtual key.</summary>
+    static void SendKey(ushort vk)
+    {
+        INPUT[] inputs = new INPUT[2];
+
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].u.ki.wVk = vk;
+        inputs[0].u.ki.dwFlags = 0;
+
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].u.ki.wVk = vk;
+        inputs[1].u.ki.dwFlags = KEYEVENTF_KEYUP;
+
+        SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
     }
 }

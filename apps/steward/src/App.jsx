@@ -403,11 +403,50 @@ export function App() {
           timeSeconds: penalty.timeSeconds,
           notes: penalty.notes,
         });
+
+        // Send in-game iRacing admin command for enforceable penalties
+        const driver = drivers[driverId];
+        const carNum = driver?.carNum || driver?.name;
+        if (carNum && window.irsdk?.adminChat) {
+          switch (penalty.type) {
+            case 'drive-through':
+            case 'stop-go':
+              window.irsdk.adminChat('!black #' + carNum);
+              break;
+            case 'dsq':
+              window.irsdk.adminChat('!dq #' + carNum);
+              break;
+            // no-action, race-incident, warning, time-penalty: overlay only
+          }
+        }
       }
     }
 
     setReviewingIncident(null);
-  }, [incidents]);
+  }, [incidents, drivers]);
+
+  // Clear an in-game penalty (undo mistakes)
+  const clearPenalty = useCallback((driverId) => {
+    const driver = drivers[driverId];
+    const carNum = driver?.carNum || driver?.name;
+    if (carNum && window.irsdk?.adminChat) {
+      window.irsdk.adminChat('!clear #' + carNum);
+    }
+  }, [drivers]);
+
+  // Send a message to all drivers via iRacing in-game chat
+  const sendIRacingChat = useCallback((message) => {
+    if (window.irsdk?.adminChat) {
+      window.irsdk.adminChat('/all ' + message);
+    }
+  }, []);
+
+  // Throw caution / safety car
+  const throwCaution = useCallback(() => {
+    if (window.irsdk?.adminChat) {
+      window.irsdk.adminChat('!yellow');
+    }
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -570,6 +609,7 @@ export function App() {
             reviewingIncident={reviewingIncident}
             incidentLocks={incidentLocks} currentStewardName={stewardName}
             penalties={penalties} onResolveIncident={resolveIncident}
+            onClearPenalty={clearPenalty} onSendIRacingChat={sendIRacingChat} onThrowCaution={throwCaution}
             lastSessionTime={lastSessionTimeRef.current}
           />
         )}
@@ -584,6 +624,7 @@ export function App() {
             reviewingIncident={reviewingIncident}
             incidentLocks={incidentLocks} currentStewardName={stewardName}
             penalties={penalties} onResolveIncident={resolveIncident}
+            onClearPenalty={clearPenalty} onSendIRacingChat={sendIRacingChat} onThrowCaution={throwCaution}
             lastSessionTime={lastSessionTimeRef.current}
           />
         )}
@@ -598,6 +639,7 @@ export function App() {
             reviewingIncident={reviewingIncident}
             incidentLocks={incidentLocks} currentStewardName={stewardName}
             penalties={penalties} onResolveIncident={resolveIncident}
+            onClearPenalty={clearPenalty} onSendIRacingChat={sendIRacingChat} onThrowCaution={throwCaution}
             lastSessionTime={lastSessionTimeRef.current}
           />
         )}
@@ -704,7 +746,7 @@ export function App() {
 
             {/* RC Messages — above incidents so it doesn't get buried */}
             <div style={{ marginBottom: '8px', flexShrink: 0 }}>
-              <RaceControlMessages drivers={drivers} />
+              <RaceControlMessages drivers={drivers} onSendIRacingChat={sendIRacingChat} onThrowCaution={throwCaution} />
             </div>
 
             {/* Incidents — takes remaining space */}

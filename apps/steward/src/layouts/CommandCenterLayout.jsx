@@ -123,7 +123,7 @@ export function CommandCenterLayout({
   incidents, incidentFilter, incidentData,
   onFilterChange, onAddIncident, onReviewIncident, onCancelReview,
   reviewingIncident, incidentLocks, currentStewardName,
-  penalties, onResolveIncident, lastSessionTime,
+  penalties, onResolveIncident, onClearPenalty, onSendIRacingChat, onThrowCaution, lastSessionTime,
   selectedDriverIds,
 }) {
   return (
@@ -134,7 +134,7 @@ export function CommandCenterLayout({
           <div style={styles.sectionLabel}>INCIDENT QUEUE</div>
 
           <div style={styles.rcWrap}>
-            <RaceControlMessages drivers={drivers} compact />
+            <RaceControlMessages drivers={drivers} onSendIRacingChat={onSendIRacingChat} onThrowCaution={onThrowCaution} compact />
           </div>
 
           <div style={styles.incidentWrap}>
@@ -199,6 +199,7 @@ export function CommandCenterLayout({
                   incident={reviewingIncident}
                   drivers={drivers}
                   onResolve={onResolveIncident}
+                  onClearPenalty={onClearPenalty}
                   onCancel={onCancelReview}
                 />
               </div>

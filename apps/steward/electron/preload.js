@@ -7,4 +7,7 @@ contextBridge.exposeInMainWorld('irsdk', {
   replayCamera: (carIdx, camGroup) => ipcRenderer.invoke('irsdk:replay:camera', carIdx, camGroup),
   replaySearch: (mode) => ipcRenderer.invoke('irsdk:replay:search', mode),
   getStatus: () => ipcRenderer.invoke('irsdk:status'),
+
+  // Admin commands (requires admin login in iRacing session)
+  adminChat: (message) => ipcRenderer.invoke('irsdk:admin:chat', message),
 });

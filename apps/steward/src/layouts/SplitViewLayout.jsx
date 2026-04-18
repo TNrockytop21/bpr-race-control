@@ -108,7 +108,7 @@ export function SplitViewLayout({
   drivers, standings, incidents, incidentFilter, incidentData,
   onFilterChange, onAddIncident, onReviewIncident, onCancelReview,
   reviewingIncident, incidentLocks, currentStewardName,
-  penalties, onResolveIncident, lastSessionTime,
+  penalties, onResolveIncident, onClearPenalty, onSendIRacingChat, onThrowCaution, lastSessionTime,
   selectedDriverIds, driverDropdownOpen, onToggleDriver, onToggleDropdown,
 }) {
   return (
@@ -128,7 +128,7 @@ export function SplitViewLayout({
           </div>
 
           <div style={styles.rcWrap}>
-            <RaceControlMessages drivers={drivers} compact />
+            <RaceControlMessages drivers={drivers} onSendIRacingChat={onSendIRacingChat} onThrowCaution={onThrowCaution} compact />
           </div>
 
           <div style={styles.incidentWrap}>
@@ -169,6 +169,7 @@ export function SplitViewLayout({
                   incident={reviewingIncident}
                   drivers={drivers}
                   onResolve={onResolveIncident}
+                  onClearPenalty={onClearPenalty}
                   onCancel={onCancelReview}
                 />
               </div>

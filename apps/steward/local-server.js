@@ -104,6 +104,10 @@ const server = http.createServer(async (req, res) => {
           args[0] || url.searchParams.get('car') || '0',
           args[1] || url.searchParams.get('group') || 'chase');
         break;
+      case 'chat':
+        const chatMsg = decodeURIComponent(args[0] || url.searchParams.get('msg') || '');
+        result = chatMsg ? await runBridge('chat', chatMsg) : { ok: false, error: 'Missing message' };
+        break;
       default:
         result = { ok: false, error: 'Unknown command: ' + command };
     }

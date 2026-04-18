@@ -97,3 +97,12 @@ ipcMain.handle('irsdk:replay:search', async (event, mode) => {
 ipcMain.handle('irsdk:status', async () => {
   return runBridge('status');
 });
+
+// ---------------------------------------------------------------
+// IPC: iRacing Admin — chat commands, penalties, safety car
+// ---------------------------------------------------------------
+
+ipcMain.handle('irsdk:admin:chat', async (event, message) => {
+  console.log(`[irsdk] admin chat: ${message}`);
+  return runBridge('chat', message);
+});

@@ -87,7 +87,7 @@ const styles = {
   },
 };
 
-export function RaceControlMessages({ drivers }) {
+export function RaceControlMessages({ drivers, onSendIRacingChat, onThrowCaution, compact }) {
   const [customMessage, setCustomMessage] = useState('');
   const [sentMessage, setSentMessage] = useState(null);
   const [sendToAll, setSendToAll] = useState(true);
@@ -101,10 +101,16 @@ export function RaceControlMessages({ drivers }) {
       timestamp: Date.now(),
     };
     wsClient.send('server:message', payload);
+
+    // Also send to iRacing's in-game chat so ALL drivers see it
+    if (sendToAll && onSendIRacingChat) {
+      onSendIRacingChat('[RC] ' + message);
+    }
+
     setSentMessage(message);
     setPendingMessage(null);
     setTimeout(() => setSentMessage(null), 3000);
-  }, [sendToAll, targetDriverId]);
+  }, [sendToAll, targetDriverId, onSendIRacingChat]);
 
   const handleTemplate = useCallback((template) => {
     setPendingMessage(template);
@@ -196,6 +202,32 @@ export function RaceControlMessages({ drivers }) {
           </button>
         ))}
       </div>
+
+      {/* Admin actions */}
+      {onThrowCaution && (
+        <div style={{ marginBottom: '8px' }}>
+          <button
+            style={{
+              padding: '6px 12px',
+              borderRadius: '3px',
+              border: '1px solid rgba(245,158,11,0.4)',
+              background: 'rgba(245,158,11,0.1)',
+              color: '#f59e0b',
+              fontSize: '10px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              width: '100%',
+            }}
+            onClick={() => {
+              if (confirm('Throw caution flag? This will send !yellow to iRacing.')) {
+                onThrowCaution();
+              }
+            }}
+          >
+            THROW CAUTION
+          </button>
+        </div>
+      )}
 
       {/* Custom message */}
       <div style={styles.customRow}>

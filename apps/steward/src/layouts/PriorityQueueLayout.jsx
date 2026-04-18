@@ -201,7 +201,7 @@ export function PriorityQueueLayout({
   drivers, standings, incidents, incidentFilter, incidentData,
   onFilterChange, onAddIncident, onReviewIncident, onCancelReview,
   reviewingIncident, incidentLocks, currentStewardName,
-  penalties, onResolveIncident, lastSessionTime,
+  penalties, onResolveIncident, onClearPenalty, onSendIRacingChat, onThrowCaution, lastSessionTime,
   selectedDriverIds,
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -222,7 +222,7 @@ export function PriorityQueueLayout({
           </div>
 
           <div style={styles.rcRow}>
-            <RaceControlMessages drivers={drivers} compact />
+            <RaceControlMessages drivers={drivers} onSendIRacingChat={onSendIRacingChat} onThrowCaution={onThrowCaution} compact />
           </div>
 
           {openIncidents.length === 0 && (
@@ -305,6 +305,7 @@ export function PriorityQueueLayout({
                         incident={reviewingIncident}
                         drivers={drivers}
                         onResolve={onResolveIncident}
+                        onClearPenalty={onClearPenalty}
                         onCancel={onCancelReview}
                       />
                     </div>
