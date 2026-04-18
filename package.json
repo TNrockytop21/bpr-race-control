@@ -1,7 +1,9 @@
 {
   "name": "telemetry-app",
   "private": true,
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "dev:server": "npm run dev -w apps/server",
     "dev:web": "npm run dev -w apps/web",
@@ -9,5 +11,10 @@
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "blob-stream": "^0.1.3",
+    "jspdf": "^4.2.1",
+    "pdfkit": "^0.18.0"
   }
 }
