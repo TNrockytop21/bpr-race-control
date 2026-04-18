@@ -32,12 +32,13 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 // ── Auth routes ──────────────────────────────────────────────
 
 app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ ok: false, error: 'Email and password required' });
+  const { email, password, username } = req.body || {};
+  const login = username || email; // Accept either
+  if (!login || !password) {
+    return res.status(400).json({ ok: false, error: 'Username and password required' });
   }
 
-  const steward = verifySteward(email, password);
+  const steward = verifySteward(login, password);
   if (!steward) {
     return res.status(401).json({ ok: false, error: 'Invalid email or password' });
   }

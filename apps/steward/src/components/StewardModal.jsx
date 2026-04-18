@@ -138,13 +138,13 @@ export function StewardModal({ onLogin }) {
         {error && <div style={styles.error}>{error}</div>}
         {loading && <div style={styles.loading}>Authenticating...</div>}
 
-        <label style={styles.label}>Email</label>
+        <label style={styles.label}>Username</label>
         <input
           style={styles.input}
-          type="email"
+          type="text"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="steward@bitepointracing.com"
+          placeholder="Enter your username"
           autoFocus
           disabled={loading}
         />

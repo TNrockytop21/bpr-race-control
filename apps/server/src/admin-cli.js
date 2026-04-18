@@ -25,23 +25,25 @@ function getArg(flag) {
 
 switch (command) {
   case 'add-steward': {
-    const email = getArg('--email');
+    const email = getArg('--email') || 'noemail@bpr.local';
     const name = getArg('--name');
     const password = getArg('--password');
     const role = getArg('--role') || 'SUPPORT';
+    const username = getArg('--username');
 
-    if (!email || !name || !password) {
-      console.error('Usage: add-steward --email <email> --name <name> --password <password> [--role MAIN|SUPPORT]');
+    if (!name || !password) {
+      console.error('Usage: add-steward --username <username> --name <name> --password <password> [--role MAIN|SUPPORT] [--email <email>]');
       process.exit(1);
     }
 
     try {
-      const steward = db.createSteward(email, name, password, role);
+      const steward = db.createSteward(email, name, password, role, username);
       console.log(`✓ Steward created:`);
-      console.log(`  ID:    ${steward.id}`);
-      console.log(`  Email: ${steward.email}`);
-      console.log(`  Name:  ${steward.name}`);
-      console.log(`  Role:  ${steward.role}`);
+      console.log(`  ID:       ${steward.id}`);
+      console.log(`  Username: ${steward.username}`);
+      console.log(`  Name:     ${steward.name}`);
+      console.log(`  Role:     ${steward.role}`);
+      console.log(`  Email:    ${steward.email}`);
     } catch (err) {
       if (err.message.includes('UNIQUE constraint')) {
         console.error(`✗ Email "${email}" already exists.`);

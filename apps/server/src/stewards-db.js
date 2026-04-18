@@ -29,6 +29,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS stewards (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE,
     name TEXT NOT NULL,
     passwordHash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'SUPPORT',
@@ -37,20 +38,24 @@ db.exec(`
   )
 `);
 
+// Add username column if upgrading from older schema
+try { db.exec('ALTER TABLE stewards ADD COLUMN username TEXT UNIQUE'); } catch {}
+
 /**
  * Create a new steward account.
  * @returns {{ id, email, name, role }} the created steward (no password)
  */
-function createSteward(email, name, password, role = 'SUPPORT') {
+function createSteward(email, name, password, role = 'SUPPORT', username = null) {
   const id = crypto.randomUUID();
   const passwordHash = bcrypt.hashSync(password, SALT_ROUNDS);
+  const user = username ? username.toLowerCase().trim() : email.toLowerCase().trim().split('@')[0];
 
   const stmt = db.prepare(
-    'INSERT INTO stewards (id, email, name, passwordHash, role) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO stewards (id, email, username, name, passwordHash, role) VALUES (?, ?, ?, ?, ?, ?)'
   );
-  stmt.run(id, email.toLowerCase().trim(), name, passwordHash, role.toUpperCase());
+  stmt.run(id, email.toLowerCase().trim(), user, name, passwordHash, role.toUpperCase());
 
-  return { id, email: email.toLowerCase().trim(), name, role: role.toUpperCase() };
+  return { id, email: email.toLowerCase().trim(), username: user, name, role: role.toUpperCase() };
 }
 
 /**
@@ -71,14 +76,24 @@ function getStewardById(id) {
 }
 
 /**
- * Verify email + password. Returns steward info (without hash) or null.
+ * Get steward by username.
  */
-function verifySteward(email, password) {
-  const steward = getStewardByEmail(email);
+function getStewardByUsername(username) {
+  return db.prepare('SELECT * FROM stewards WHERE username = ? AND active = 1')
+    .get(username.toLowerCase().trim()) || null;
+}
+
+/**
+ * Verify login. Accepts username OR email + password.
+ * Returns steward info (without hash) or null.
+ */
+function verifySteward(login, password) {
+  // Try username first, then email
+  let steward = getStewardByUsername(login);
+  if (!steward) steward = getStewardByEmail(login);
   if (!steward) return null;
   if (!bcrypt.compareSync(password, steward.passwordHash)) return null;
-  // Return without password hash
-  return { id: steward.id, email: steward.email, name: steward.name, role: steward.role };
+  return { id: steward.id, email: steward.email, username: steward.username, name: steward.name, role: steward.role };
 }
 
 /**
@@ -119,6 +134,7 @@ function updateRole(email, role) {
 export {
   createSteward,
   getStewardByEmail,
+  getStewardByUsername,
   getStewardById,
   verifySteward,
   listStewards,
