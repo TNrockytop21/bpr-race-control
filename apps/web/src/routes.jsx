@@ -16,6 +16,7 @@ import {
   LapCompareOverlay,
   HeadToHeadOverlay,
   LiveTraceOverlay,
+  FuelOverlay,
 } from './pages/overlays/index';
 
 export const router = createBrowserRouter([
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
       { path: 'laptrace', element: <LapCompareOverlay /> },   // Current vs best lap
       { path: 'h2h',      element: <HeadToHeadOverlay /> },   // Head to head comparison
       { path: 'trace',    element: <LiveTraceOverlay /> },   // Full-lap telemetry graph
+      { path: 'fuel',     element: <FuelOverlay /> },        // Fuel monitor
     ],
   },
 ]);

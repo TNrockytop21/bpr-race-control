@@ -13,6 +13,7 @@ import { BattleTracker } from '../../components/broadcast/BattleTracker';
 import { TelemetryOverlayCard, TelemetryCompare } from '../../components/analytics/TelemetryOverlayCard';
 import { LapTraceComparison, DriverVsDriver } from '../../components/analytics/LapTraceComparison';
 import { LiveTelemetryGraph } from '../../components/analytics/LiveTelemetryGraph';
+import { FuelMonitor } from '../../components/analytics/FuelMonitor';
 import { useSession } from '../../context/SessionContext';
 
 export function GapOverlay() {
@@ -97,6 +98,15 @@ export function HeadToHeadOverlay() {
   return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px' }}>
       <DriverVsDriver driverAName={driverA} driverBName={driverB} />
+    </div>
+  );
+}
+
+export function FuelOverlay() {
+  const { driverFilter, maxDrivers } = useOutletContext();
+  return (
+    <div style={{ height: '100vh', overflow: 'auto' }}>
+      <FuelMonitor driverFilter={driverFilter} maxDrivers={maxDrivers} />
     </div>
   );
 }
