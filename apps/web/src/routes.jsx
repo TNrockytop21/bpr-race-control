@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { BroadcastDashboard } from './pages/BroadcastDashboard';
 import { SpectatorPage } from './pages/SpectatorPage';
+import { DriverDashboard } from './pages/DriverDashboard';
 import { OverlayShell } from './layouts/OverlayShell';
 import {
   GapOverlay,
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <BroadcastDashboard /> },
       { path: 'live', element: <SpectatorPage /> },
+      { path: 'driver', element: <DriverDashboard /> },
     ],
   },
 
