@@ -4,14 +4,17 @@
  *   • Fuel Monitor (fuel + laps remaining)
  *   • Live Trace (full-lap telemetry graph)
  *   • Lap Compare (current vs best)
+ *   • Incident counter (with color thresholds + flash on increment)
  *
  * Usage:
  *   /driver                → auto-picks first connected driver
  *   /driver?driver=D.Newman → pin to specific driver by name
  */
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
+import { useTelemetryBuffers } from '../context/TelemetryContext';
+import { useAnimationFrame } from '../hooks/useAnimationFrame';
 import { TelemetryOverlayCard } from '../components/analytics/TelemetryOverlayCard';
 import { FuelMonitor } from '../components/analytics/FuelMonitor';
 import { LiveTelemetryGraph } from '../components/analytics/LiveTelemetryGraph';
@@ -180,6 +183,9 @@ export function DriverDashboard() {
             </option>
           ))}
         </select>
+
+        <IncidentCounter driverId={driver?.id} />
+
         <span style={styles.meta}>
           {sessionInfo?.trackName ? sessionInfo.trackName : 'No track'}
           {' · '}
@@ -228,6 +234,112 @@ export function DriverDashboard() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Incident counter badge — flashes red on increment, color-coded by threshold
+function IncidentCounter({ driverId }) {
+  const buffersRef = useTelemetryBuffers();
+  const countRef = useRef(null);
+  const containerRef = useRef(null);
+  const lastCountRef = useRef(null);
+  const flashTimerRef = useRef(null);
+
+  // Reset tracking when driver changes (so switching drivers doesn't flash)
+  useEffect(() => {
+    lastCountRef.current = null;
+    if (flashTimerRef.current) {
+      clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = null;
+    }
+    if (containerRef.current) {
+      containerRef.current.style.background = 'rgba(6,6,8,0.6)';
+      containerRef.current.style.boxShadow = 'none';
+    }
+    if (countRef.current) {
+      countRef.current.textContent = '—';
+      countRef.current.style.color = '#666';
+    }
+  }, [driverId]);
+
+  useAnimationFrame(() => {
+    if (!driverId) return;
+    const buffer = buffersRef.current.get(driverId);
+    if (!buffer) return;
+    const frame = buffer.getLatest();
+    if (!frame) return;
+
+    const incidents = frame.incidents;
+    if (incidents == null) return;
+
+    // Update number + color
+    let color = '#22c55e'; // green 0–4
+    if (incidents >= 13) color = '#ef4444'; // red — approaching DQ threshold
+    else if (incidents >= 5) color = '#f59e0b'; // amber
+
+    if (countRef.current) {
+      countRef.current.textContent = incidents;
+      countRef.current.style.color = color;
+    }
+
+    // Flash container on increase
+    const prev = lastCountRef.current;
+    if (prev != null && incidents > prev && containerRef.current) {
+      containerRef.current.style.background = 'rgba(239,68,68,0.35)';
+      containerRef.current.style.boxShadow = '0 0 0 1px #ef4444';
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.style.background = 'rgba(6,6,8,0.6)';
+          containerRef.current.style.boxShadow = 'none';
+        }
+      }, 1500);
+    }
+    lastCountRef.current = incidents;
+  });
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '5px 10px',
+        border: '1px solid #222',
+        borderRadius: '3px',
+        background: 'rgba(6,6,8,0.6)',
+        transition: 'background 150ms ease, box-shadow 150ms ease',
+      }}
+      title="iRacing incident count — green <5, amber 5-12, red 13+"
+    >
+      <span
+        style={{
+          color: '#888',
+          textTransform: 'uppercase',
+          letterSpacing: '0.6px',
+          fontSize: '9px',
+          fontWeight: 700,
+        }}
+      >
+        Incidents
+      </span>
+      <span
+        ref={countRef}
+        style={{
+          fontSize: '18px',
+          fontWeight: 800,
+          color: '#666',
+          lineHeight: 1,
+          minWidth: '22px',
+          textAlign: 'right',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        —
+      </span>
+      <span style={{ color: '#666', fontSize: '11px', fontWeight: 700 }}>x</span>
     </div>
   );
 }
