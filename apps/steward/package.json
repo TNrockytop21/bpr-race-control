@@ -1,7 +1,7 @@
 {
   "name": "bpr-steward",
   "version": "0.1.0",
-  "description": "BPR Race Control — Steward Application",
+  "description": "BPR Race Control \u2014 Steward Application",
   "author": "Bite Point Racing",
   "private": true,
   "main": "electron/main.js",
@@ -12,7 +12,8 @@
     "pack": "vite build && electron-builder --win --dir",
     "pack:mac": "vite build && electron-builder --mac --dir",
     "dist": "vite build && electron-builder --win",
-    "dist:mac": "vite build && electron-builder --mac"
+    "dist:mac": "vite build && electron-builder --mac",
+    "dev:web": "vite --port 5179 --strictPort"
   },
   "dependencies": {
     "react": "^18.3.1",

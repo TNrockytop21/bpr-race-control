@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
-const AUTH_BASE = 'https://racecontrol.bitepointracing.com';
+import { serverOverride } from '../lib/ws-client';
+const AUTH_BASE = serverOverride() || 'https://racecontrol.bitepointracing.com';
 
 const styles = {
   overlay: {

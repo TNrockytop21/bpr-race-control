@@ -24,12 +24,19 @@ async function apiCall(path) {
 }
 
 const browserIrsdk = {
+  platform: 'browser',
+  hasSim: false,
   replayJump: (sessionTime) => apiCall(`replay-jump/${sessionTime}`),
   replaySpeed: (speed) => speed === 0 ? apiCall('replay-pause') : apiCall(`replay-speed/${speed}`),
   replayCamera: (carIdx, camGroup) => apiCall(`camera/${carIdx}/${camGroup}`),
   replaySearch: (mode) => apiCall(`replay-search/${mode}`),
   getStatus: () => apiCall('status'),
   adminChat: (message) => apiCall(`chat/${encodeURIComponent(message)}`),
+  replayTime: (sessionNum, sessionTime) => apiCall(`replay-time/${sessionNum}/${sessionTime}`),
+  // The field feed only runs inside Electron on the PC with iRacing.
+  feedStart: async () => ({ ok: false, error: 'feed unavailable in browser mode' }),
+  feedStop: async () => ({ ok: true }),
+  onFeed: () => () => {},
 };
 
 /**

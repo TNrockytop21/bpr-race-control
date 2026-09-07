@@ -57,6 +57,30 @@ export const MSG = {
   INCIDENT_UNLOCKED: 'incident:unlocked',
   DRIVER_PROTEST: 'driver:protest',
 
+  // Race Control v2 — admin-session field feed + steward workflow
+  // (see RACE_CONTROL_V2.md). Steward -> Server:
+  RC_FIELD: 'rc:field',            // raw feed line from the steward's irsdk-bridge feed
+  RC_CLAIM: 'rc:claim',            // { incidentId, force? }
+  RC_RELEASE: 'rc:release',        // { incidentId }
+  RC_UPDATE: 'rc:update',          // { incidentId, patch: { notes?, cars?, status? } }
+  RC_DECIDE: 'rc:decide',          // { incidentId, decision }
+  RC_PUBLISH: 'rc:publish',        // { incidentId, what: 'investigation' | 'decision' }
+  RC_CREATE: 'rc:create',          // { cars, sessionTime?, sessionNum?, notes? }
+  RC_DISMISS: 'rc:dismiss',        // { incidentId }
+  RC_SHARE_VIEW: 'rc:shareView',   // { sessionNum, sessionTime, carIdx, carNumber, camGroup, camGroupName, speed }
+  RC_APPLY_IN_SIM: 'rc:applyInSim', // { incidentId, command } — remote steward asks the in-session PC to type an admin command
+  RC_APPLIED: 'rc:applied',        // { incidentId, command, ok, error } — the in-session PC reports back
+  // Server -> Steward:
+  RC_SNAPSHOT: 'rc:snapshot',
+  RC_INCIDENT: 'rc:incident',
+  RC_INCIDENT_REMOVED: 'rc:incidentRemoved',
+  RC_FIELD_STATE: 'rc:fieldState',
+  RC_SESSION: 'rc:session',
+  RC_SOURCE: 'rc:source',
+  RC_VIEW_SHARED: 'rc:viewShared',
+  RC_PENALTY_SERVED: 'rc:penaltyServed',
+  RC_ERROR: 'rc:error',
+
   // Server -> Agent (reverse channel)
   SERVER_PENALTY: 'server:penalty',
   SERVER_UNDER_INVESTIGATION: 'server:underInvestigation',

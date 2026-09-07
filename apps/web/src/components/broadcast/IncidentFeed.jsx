@@ -74,6 +74,10 @@ const EVENT_CONFIG = {
   penalty_issued: { tag: 'PENALTY', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' },
   penalty_served: { tag: 'SERVED', color: '#22c55e', bg: 'rgba(34,197,94,0.06)' },
   under_investigation: { tag: 'INV', color: '#f59e0b', bg: 'rgba(245,158,11,0.06)' },
+  racing_incident: { tag: 'RACING INC', color: '#60a5fa', bg: 'rgba(96,165,250,0.06)' },
+  no_further_action: { tag: 'NFA', color: '#22c55e', bg: 'rgba(34,197,94,0.06)' },
+  incident_noted: { tag: 'NOTED', color: '#9ca3af', bg: 'rgba(156,163,175,0.06)' },
+  warning_issued: { tag: 'WARNING', color: '#f59e0b', bg: 'rgba(245,158,11,0.06)' },
   driver_protest: { tag: 'PROTEST', color: '#f59e0b', bg: 'rgba(245,158,11,0.06)' },
   race_control_message: { tag: 'RC', color: '#ccc', bg: 'rgba(255,255,255,0.04)' },
   new_best_lap: { tag: 'FAST', color: '#a78bfa', bg: 'rgba(139,92,246,0.06)' },
@@ -94,11 +98,16 @@ function formatEventText(event) {
     case 'blue_flag_violation':
       return `${d.slowDriver} blocking ${d.fastDriver} (${d.duration}s)`;
     case 'penalty_issued':
-      return `${d.driverName}: ${d.penaltyType?.replace('-', ' ')}${d.timeSeconds ? ` (${d.timeSeconds}s)` : ''}`;
+      return `${d.carNumber ? `#${d.carNumber} ` : ''}${d.driverName}: ${d.penaltyType?.replace(/-/g, ' ')}${d.timeSeconds ? ` (${d.timeSeconds}s)` : ''}${d.reason ? ` — ${d.reason}` : ''}`;
     case 'penalty_served':
       return `${d.driverName} served ${d.penaltyType?.replace('-', ' ')}`;
     case 'under_investigation':
       return `${d.driverNames} under investigation`;
+    case 'racing_incident':
+    case 'no_further_action':
+    case 'incident_noted':
+    case 'warning_issued':
+      return `${d.driverNames || d.driverName}${d.reason ? ` — ${d.reason}` : ''}`;
     case 'driver_protest':
       return `${d.driverName} filed protest`;
     case 'race_control_message':

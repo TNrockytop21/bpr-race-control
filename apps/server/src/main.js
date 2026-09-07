@@ -72,6 +72,15 @@ app.post('/api/streamdeck', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Race Control v2 read API (website dump / audits) ────────
+import { rc } from './race-control.js';
+app.get('/api/rc/sessions', (req, res) => res.json({ ok: true, current: rc.sessionKey, sessions: rc.sessionsList() }));
+app.get('/api/rc/incidents', (req, res) => {
+  const key = req.query.session ? String(req.query.session) : null;
+  res.json({ ok: true, sessionKey: key || rc.sessionKey, incidents: rc.ledger(key) });
+});
+app.get('/api/rc/state', (req, res) => res.json({ ok: true, ...rc.snapshot() }));
+
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws, req) => {

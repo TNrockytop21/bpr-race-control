@@ -14,3 +14,9 @@ plugins/simhub/BPRRaceControl/obj/
 plugins/simhub/BPRRaceControl/.vs/
 *.user
 *.suo
+
+# Race Control v2 local state
+data/*.db
+data/*.db-*
+data/.jwt-secret
+apps/steward/release/

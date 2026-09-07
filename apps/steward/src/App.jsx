@@ -16,6 +16,8 @@ import { SplitViewLayout } from './layouts/SplitViewLayout';
 import { CommandCenterLayout } from './layouts/CommandCenterLayout';
 import { PriorityQueueLayout } from './layouts/PriorityQueueLayout';
 import { getIrsdk } from './lib/irsdk-browser';
+import { useRaceControl } from './rc/useRaceControl';
+import { RaceControlLayout } from './rc/RaceControlLayout';
 
 // If running in a browser (not Electron), install the HTTP fallback
 // so all existing window.irsdk references work without changes.
@@ -134,7 +136,7 @@ export function App() {
 
   // Layout selection — persisted in localStorage
   const [layout, setLayout] = useState(() => {
-    try { return localStorage.getItem('bpr-layout') || 'split'; } catch { return 'split'; }
+    try { return localStorage.getItem('bpr-layout') || 'racecontrol'; } catch { return 'racecontrol'; }
   });
   const changeLayout = useCallback((l) => {
     setLayout(l);
@@ -142,7 +144,9 @@ export function App() {
   }, []);
 
   // ── Auth + Multi-steward coordination ───────────────────────
+  const devName = (() => { try { return localStorage.getItem('bpr-dev-name') || ''; } catch { return ''; } })();
   const [showLoginModal, setShowLoginModal] = useState(() => {
+    if (devName) return false; // local dev against a simulator — no password path
     // Auto-login if we have a saved token
     try {
       const savedToken = localStorage.getItem('bpr-auth-token');
@@ -158,17 +162,27 @@ export function App() {
     try { return localStorage.getItem('bpr-auth-token') || ''; } catch { return ''; }
   });
   const [stewardName, setStewardName] = useState(() => {
+    if (devName) return devName;
     try { return JSON.parse(localStorage.getItem('bpr-auth-steward') || '{}').name || ''; } catch { return ''; }
   });
   const [stewardRole, setStewardRole] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bpr-auth-steward') || '{}').role || 'MAIN'; } catch { return 'MAIN'; }
   });
   const [connectedStewards, setConnectedStewards] = useState([]);
+  const [stewardId, setStewardId] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bpr-auth-steward') || '{}').id || ''; } catch { return ''; }
+  });
+  const [rcAuthenticated, setRcAuthenticated] = useState(false);
   const [incidentLocks, setIncidentLocks] = useState({}); // incidentId → { stewardName, ... }
 
   useEffect(() => {
     const unsubs = [
       wsClient.on('_connected', setConnected),
+      wsClient.on('auth:ok', (payload) => {
+        if (payload?.steward?.id) setStewardId(payload.steward.id);
+        setRcAuthenticated(true);
+      }),
+      wsClient.on('_connected', (up) => { if (!up) setRcAuthenticated(false); }),
 
       wsClient.on('session:snapshot', (payload) => {
         setSessionInfo(payload.sessionInfo);
@@ -359,9 +373,14 @@ export function App() {
     wsClient.setToken(token);
   }, []);
 
-  // Auto-connect if we have a saved token
+  // Race Control v2 — field feed, incident ledger, decisions, view sync
+  const rc = useRaceControl({ authenticated: rcAuthenticated, stewardId, stewardName });
+
+  // Auto-connect if we have a saved token (or the dev name)
   useEffect(() => {
-    if (authToken && !showLoginModal) {
+    if (devName) {
+      wsClient.setDevName(devName);
+    } else if (authToken && !showLoginModal) {
       wsClient.setToken(authToken);
     }
 
@@ -593,6 +612,7 @@ export function App() {
           {/* Layout selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginRight: '12px' }}>
             {[
+              { id: 'racecontrol', label: 'Race Control', icon: '⚑' },
               { id: 'split', label: 'Split', icon: '◫' },
               { id: 'command', label: 'Command', icon: '☰' },
               { id: 'queue', label: 'Queue', icon: '▤' },
@@ -634,6 +654,9 @@ export function App() {
 
       {/* Body — Active Layout */}
       <div style={styles.body}>
+        {layout === 'racecontrol' && (
+          <RaceControlLayout rc={rc} drivers={drivers} />
+        )}
         {layout === 'split' && (
           <SplitViewLayout
             drivers={drivers} standings={standings} sessionInfo={sessionInfo} trackShape={trackShape}

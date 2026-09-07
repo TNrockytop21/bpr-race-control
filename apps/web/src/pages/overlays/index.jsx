@@ -14,6 +14,7 @@ import { TelemetryOverlayCard, TelemetryCompare } from '../../components/analyti
 import { LapTraceComparison, DriverVsDriver } from '../../components/analytics/LapTraceComparison';
 import { LiveTelemetryGraph } from '../../components/analytics/LiveTelemetryGraph';
 import { FuelMonitor } from '../../components/analytics/FuelMonitor';
+import { RaceControlOverlay } from '../../components/broadcast/RaceControlOverlay';
 import { useSession } from '../../context/SessionContext';
 
 export function GapOverlay() {
@@ -130,4 +131,11 @@ export function LiveTraceOverlay() {
       )}
     </div>
   );
+}
+
+// Race Control calls (under investigation / penalty / no further action)
+export function RaceControlCallsOverlay() {
+  const { maxDrivers } = useOutletContext();
+  const params = new URLSearchParams(window.location.search);
+  return <RaceControlOverlay max={Number(params.get('max') || 3)} hold={Number(params.get('hold') || 12)} />;
 }

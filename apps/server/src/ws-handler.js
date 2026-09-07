@@ -5,6 +5,7 @@ import { loadProfile } from './profiles.js';
 import { savePlan, loadPlan, listPlans, deletePlan } from './race-plans.js';
 import { recorder } from './session-recorder.js';
 import { verifyToken } from './auth.js';
+import { rc } from './race-control.js';
 
 let agentCounter = 0;
 
@@ -15,6 +16,27 @@ const agentSockets = new Map();
 let stewardCounter = 0;
 const stewards = new Map(); // ws -> { id, name, role, connectedAt }
 const incidentLocks = new Map(); // incidentId -> { stewardId, stewardName, lockedAt }
+
+// ── Race Control v2 fan-out ──────────────────────────────────
+// The rc module is transport-agnostic; everything it emits is relayed
+// here: stewards get the working state, viewers (broadcast overlays)
+// get the published events through the existing `event` channel.
+rc.on('incident', (incident) => broadcastToStewards(MSG.RC_INCIDENT, { incident }));
+rc.on('field', (state) => broadcastToStewards(MSG.RC_FIELD_STATE, state));
+rc.on('session', (session) => broadcastToStewards(MSG.RC_SESSION, session));
+rc.on('source', (source) => broadcastToStewards(MSG.RC_SOURCE, source));
+rc.on('event', ({ type, data }) => {
+  const ev = store.addEvent(type, data);
+  broadcastToViewers(MSG.EVENT, ev);
+  recorder.recordEvent({ type, ...data });
+  console.log(`[rc] ${type}: ${data.driverNames || data.driverName || ''}${data.penaltyType ? ` — ${data.penaltyType}` : ''}`);
+});
+rc.on('served', (served) => {
+  const inc = rc.markServed(served.carIdx, served.sessionTime);
+  broadcastToStewards(MSG.RC_PENALTY_SERVED, { ...served, incidentId: inc?.id || null });
+  const ev = store.addEvent('penalty_served', { driverName: served.name, carNumber: served.number, penaltyType: inc?.decision?.tier || 'black-flag', incidentId: inc?.id || null });
+  broadcastToViewers(MSG.EVENT, ev);
+});
 
 export function handleAgentConnection(ws, req) {
   const agentId = `agent-${++agentCounter}`;
@@ -411,6 +433,8 @@ export function handleStewardConnection(ws, req) {
           locks: Object.fromEntries(incidentLocks),
         });
 
+        sendToViewer(ws, MSG.RC_SNAPSHOT, rc.snapshot());
+
         ws.send(JSON.stringify({
           type: 'auth:ok',
           payload: { steward: stewardInfo },
@@ -442,6 +466,8 @@ export function handleStewardConnection(ws, req) {
           stewards: [...stewards.values()],
           locks: Object.fromEntries(incidentLocks),
         });
+        sendToViewer(ws, MSG.RC_SNAPSHOT, rc.snapshot());
+        ws.send(JSON.stringify({ type: 'auth:ok', payload: { steward: stewardInfo, legacy: true } }));
         console.log(`[steward] ${name} (${role}) identified via legacy hello (no auth)`);
         return;
       }
@@ -619,6 +645,69 @@ export function handleStewardConnection(ws, req) {
         const driverNames = driverIds.map((id) => store.drivers.get(id)?.name || id).join(', ');
         const invEvent = store.addEvent('under_investigation', { driverNames, notes: notes || null });
         broadcastToViewers(MSG.EVENT, invEvent);
+        break;
+      }
+
+      // ── Race Control v2 ─────────────────────────────────────
+      case MSG.RC_FIELD: {
+        rc.ingest(payload, stewardInfo);
+        break;
+      }
+      case MSG.RC_CLAIM:
+      case MSG.RC_RELEASE:
+      case MSG.RC_UPDATE:
+      case MSG.RC_DECIDE:
+      case MSG.RC_PUBLISH:
+      case MSG.RC_CREATE:
+      case MSG.RC_DISMISS: {
+        let result;
+        try {
+          switch (type) {
+            case MSG.RC_CLAIM: result = rc.claim(payload?.incidentId, stewardInfo, !!payload?.force); break;
+            case MSG.RC_RELEASE: result = rc.release(payload?.incidentId, stewardInfo); break;
+            case MSG.RC_UPDATE: result = rc.update(payload?.incidentId, payload?.patch || {}, stewardInfo); break;
+            case MSG.RC_DECIDE: result = rc.decide(payload?.incidentId, payload?.decision, stewardInfo); break;
+            case MSG.RC_PUBLISH: result = rc.publish(payload?.incidentId, payload?.what || 'decision', stewardInfo); break;
+            case MSG.RC_CREATE: result = rc.create(payload || {}, stewardInfo); break;
+            case MSG.RC_DISMISS: result = rc.dismiss(payload?.incidentId, stewardInfo); break;
+          }
+        } catch (err) {
+          result = { error: err.message };
+        }
+        if (result?.error) sendToViewer(ws, MSG.RC_ERROR, { action: type, incidentId: payload?.incidentId || null, error: result.error, by: result.by || null });
+        break;
+      }
+      // A steward without iRacing on their PC (remote) issues a penalty:
+      // relay the admin command to whichever steward's feed is live, i.e. the
+      // PC that is in the session as an admin. That PC types it and reports.
+      case MSG.RC_APPLY_IN_SIM: {
+        const { incidentId, command } = payload || {};
+        if (!command || !/^!(black|clear|dq|eol|remove)\b/i.test(String(command))) {
+          sendToViewer(ws, MSG.RC_ERROR, { action: type, incidentId, error: 'unsupported command' });
+          break;
+        }
+        const src = rc.sourceInfo();
+        let target = null;
+        for (const [sws, info] of stewards) if (src?.active && info.id === src.stewardId && sws.readyState === 1) target = sws;
+        if (!target) {
+          sendToViewer(ws, MSG.RC_ERROR, { action: type, incidentId, error: 'nobody is in the session to apply it' });
+          break;
+        }
+        if (target === ws) { sendToViewer(ws, MSG.RC_ERROR, { action: type, incidentId, error: 'you are the in-session PC — apply locally' }); break; }
+        target.send(JSON.stringify({ type: MSG.RC_APPLY_IN_SIM, payload: { incidentId, command: String(command).slice(0, 80), from: { id: stewardInfo.id, name: stewardInfo.name }, at: Date.now() } }));
+        console.log(`[rc] ${stewardInfo.name} -> ${src.name}: ${command}`);
+        break;
+      }
+      case MSG.RC_APPLIED: {
+        broadcastToStewards(MSG.RC_APPLIED, { ...(payload || {}), by: { id: stewardInfo.id, name: stewardInfo.name }, at: Date.now() });
+        break;
+      }
+      case MSG.RC_SHARE_VIEW: {
+        const view = payload || {};
+        for (const [sws, info] of stewards) {
+          if (sws === ws || sws.readyState !== 1) continue;
+          sws.send(JSON.stringify({ type: MSG.RC_VIEW_SHARED, payload: { from: { id: stewardInfo.id, name: stewardInfo.name }, view, at: Date.now() } }));
+        }
         break;
       }
 

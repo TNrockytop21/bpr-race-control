@@ -93,6 +93,9 @@ const server = http.createServer(async (req, res) => {
       case 'replay-pause':
         result = await runBridge('replay-pause');
         break;
+      case 'replay-time':
+        result = await runBridge('replay-time', args[0] || '0', args[1] || '0');
+        break;
       case 'replay-play':
         result = await runBridge('replay-play');
         break;

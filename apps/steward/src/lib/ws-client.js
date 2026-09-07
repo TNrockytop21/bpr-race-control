@@ -5,10 +5,18 @@
  * Auto-reconnects on disconnect.
  */
 
-const SERVERS = [
-  'wss://racecontrol.bitepointracing.com/ws/steward',
-  'ws://45.55.216.21/ws/steward', // fallback if WSS fails
-];
+// Local override for development: localStorage['bpr-server'] = 'http://localhost:8091'
+// (the login modal honours the same key for /api/auth). Cleared = production.
+export function serverOverride() {
+  try { return (localStorage.getItem('bpr-server') || '').trim().replace(/\/$/, ''); } catch { return ''; }
+}
+const OVERRIDE = serverOverride();
+const SERVERS = OVERRIDE
+  ? [OVERRIDE.replace(/^http/, 'ws') + '/ws/steward']
+  : [
+    'wss://racecontrol.bitepointracing.com/ws/steward',
+    'ws://45.55.216.21/ws/steward', // fallback if WSS fails
+  ];
 const RECONNECT_DELAY = 3000;
 
 class StewardWsClient {
@@ -27,6 +35,20 @@ class StewardWsClient {
    */
   setToken(token) {
     this._token = token;
+    this._devName = null;
+    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) {
+      this._connect();
+    }
+  }
+
+  /**
+   * Development only: identify with the server's legacy steward:hello
+   * (no password). Used with localStorage['bpr-dev-name'] against a local
+   * server + field simulator. Production stewards always use setToken.
+   */
+  setDevName(name) {
+    this._devName = name;
+    this._token = `dev:${name}`; // truthy so connect/reconnect proceed
     if (!this._ws || this._ws.readyState !== WebSocket.OPEN) {
       this._connect();
     }
@@ -61,11 +83,15 @@ class StewardWsClient {
       this._emit('_connected', true);
       console.log('[ws] connected, sending auth token');
 
-      // Send auth token as first message
-      this._ws.send(JSON.stringify({
-        type: 'auth:token',
-        payload: { token: this._token },
-      }));
+      // Send auth token as first message (or the legacy hello in dev mode)
+      if (this._devName) {
+        this._ws.send(JSON.stringify({ type: 'steward:hello', payload: { name: this._devName, role: 'MAIN' } }));
+      } else {
+        this._ws.send(JSON.stringify({
+          type: 'auth:token',
+          payload: { token: this._token },
+        }));
+      }
     };
 
     this._ws.onmessage = (event) => {

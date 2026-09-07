@@ -18,6 +18,7 @@ import {
   HeadToHeadOverlay,
   LiveTraceOverlay,
   FuelOverlay,
+  RaceControlCallsOverlay,
 } from './pages/overlays/index';
 
 export const router = createBrowserRouter([
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
       { path: 'h2h',      element: <HeadToHeadOverlay /> },   // Head to head comparison
       { path: 'trace',    element: <LiveTraceOverlay /> },   // Full-lap telemetry graph
       { path: 'fuel',     element: <FuelOverlay /> },        // Fuel monitor
+      { path: 'racecontrol', element: <RaceControlCallsOverlay /> }, // Steward calls (Race Control v2)
     ],
   },
 ]);

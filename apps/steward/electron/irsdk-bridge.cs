@@ -24,17 +24,20 @@ using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System.Threading;
 
-class IRSDKBridge
+partial class IRSDKBridge
 {
     // iRacing BroadcastMsg IDs (from irsdk_defines.h)
-    const int BroadcastCamSwitchNum = 0;
-    const int BroadcastReplaySetPlaySpeed = 1;
-    const int BroadcastReplaySetPlayPosition = 2;
-    const int BroadcastReplaySearch = 3;
-    const int BroadcastReplaySetState = 4;
+    const int BroadcastCamSwitchPos = 0;      // car POSITION, group, camera
+    const int BroadcastCamSwitchNum = 1;      // car NUMBER (irsdk_padCarNum), group, camera
+    const int BroadcastCamSetState = 2;
+    const int BroadcastReplaySetPlaySpeed = 3;
+    const int BroadcastReplaySetPlayPosition = 4;
+    const int BroadcastReplaySearch = 5;
+    const int BroadcastReplaySetState = 6;
 
     // Chat command (note: SDK has typo "Comand")
     const int BroadcastChatComand = 8;
+    const int BroadcastReplaySearchSessionTime = 12; // sessionNum, sessionTimeMS (32-bit lParam)
     const int ChatCommand_BeginChat = 1;
     const int ChatCommand_Cancel = 3;
 
@@ -143,6 +146,32 @@ class IRSDKBridge
         SendNotifyMessage(HWND_BROADCAST, irsdk_broadcastMsgId, wParam, lParam);
     }
 
+    // var2 as a full 32-bit lParam — used by ReplaySetPlayPosition (frame
+    // number) and ReplaySearchSessionTime (milliseconds). The 16/16 split
+    // above silently overflows after 65535 frames (~18 min at 60 fps).
+    static void SendBroadcast32(int msgId, int var1, int lParam)
+    {
+        if (irsdk_broadcastMsgId == 0)
+            irsdk_broadcastMsgId = RegisterWindowMessage("IRSDK_BROADCASTMSG");
+        uint wParam = MakeLong((ushort)(msgId & 0xFFFF), (ushort)(var1 & 0xFFFF));
+        SendNotifyMessage(HWND_BROADCAST, irsdk_broadcastMsgId, wParam, (uint)lParam);
+    }
+
+    // irsdk_padCarNum: encodes leading zeros ("001" -> 1 + 1000*3) so
+    // CamSwitchNum picks the right car when numbers collide with padding.
+    static int PadCarNum(string s)
+    {
+        s = (s ?? "").Trim().TrimStart('#');
+        int num;
+        if (!int.TryParse(s, out num)) return -1;
+        int zero = s.Length - num.ToString().Length;
+        int numPlace = 1;
+        if (num > 99) numPlace = 3;
+        else if (num > 9) numPlace = 2;
+        if (zero > 0) { numPlace += zero; num = num + 1000 * numPlace; }
+        return num;
+    }
+
     static bool IsIRacingRunning()
     {
         var procs = Process.GetProcessesByName("iRacingSim64DX11");
@@ -154,6 +183,8 @@ class IRSDKBridge
     static int ParseCameraGroup(string name)
     {
         // Map common camera names to typical iRacing group numbers
+        int direct;
+        if (int.TryParse(name, out direct)) return direct;
         switch (name.ToLower())
         {
             case "nose": return 1;
@@ -197,6 +228,15 @@ class IRSDKBridge
             return;
         }
 
+        if (cmd == "feed")
+        {
+            // Long-running: streams JSON lines (session + frames) until killed.
+            int hz = 4;
+            if (args.Length > 1) int.TryParse(args[1], out hz);
+            RunFeed(hz);
+            return;
+        }
+
         if (!IsIRacingRunning())
         {
             Console.WriteLine("{\"ok\":false,\"error\":\"iRacing not running\"}");
@@ -218,10 +258,31 @@ class IRSDKBridge
                     Console.WriteLine("{\"ok\":false,\"error\":\"Invalid sessionTime\"}");
                     return;
                 }
-                // Convert sessionTime to frame number (60fps)
+                // Convert sessionTime to frame number (60fps) — assumes the replay
+                // buffer starts at t=0 of the current session. Prefer replay-time.
                 int frameNum = (int)(sessionTime * 60.0);
-                SendBroadcast(BroadcastReplaySetPlayPosition, (int)ReplayPosBegin, frameNum, 0);
+                SendBroadcast32(BroadcastReplaySetPlayPosition, (int)ReplayPosBegin, frameNum);
                 Console.WriteLine("{\"ok\":true,\"action\":\"replay-jump\",\"sessionTime\":" + sessionTime + "}");
+                break;
+            }
+
+            case "replay-time":
+            {
+                // replay-time <sessionNum> <sessionTime>  — exact seek within a session
+                if (args.Length < 3)
+                {
+                    Console.WriteLine("{\"ok\":false,\"error\":\"Usage: replay-time <sessionNum> <sessionTime>\"}");
+                    return;
+                }
+                int sessionNum; double st;
+                if (!int.TryParse(args[1], out sessionNum) || !double.TryParse(args[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out st))
+                {
+                    Console.WriteLine("{\"ok\":false,\"error\":\"Invalid arguments\"}");
+                    return;
+                }
+                if (st < 0) st = 0;
+                SendBroadcast32(BroadcastReplaySearchSessionTime, sessionNum, (int)(st * 1000.0));
+                Console.WriteLine("{\"ok\":true,\"action\":\"replay-time\",\"sessionNum\":" + sessionNum + ",\"sessionTime\":" + st.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}");
                 break;
             }
 
@@ -301,17 +362,26 @@ class IRSDKBridge
                     Console.WriteLine("{\"ok\":false,\"error\":\"Usage: camera <carIdx> <group>\"}");
                     return;
                 }
-                int carIdx;
-                if (!int.TryParse(args[1], out carIdx))
+                // camera <carNumber> <group>  — carNumber is the number on the car
+                // ("001" keeps its zeros). Use "pos:N" to switch by race position.
+                string target = args[1];
+                int camGroup = ParseCameraGroup(args[2]);
+                if (target.StartsWith("pos:"))
                 {
-                    Console.WriteLine("{\"ok\":false,\"error\":\"Invalid carIdx\"}");
+                    int pos;
+                    if (!int.TryParse(target.Substring(4), out pos)) { Console.WriteLine("{\"ok\":false,\"error\":\"Invalid position\"}"); return; }
+                    SendBroadcast(BroadcastCamSwitchPos, pos, camGroup, 0);
+                    Console.WriteLine("{\"ok\":true,\"action\":\"camera\",\"position\":" + pos + ",\"camGroup\":" + camGroup + "}");
+                    break;
+                }
+                int padded = PadCarNum(target);
+                if (padded < 0)
+                {
+                    Console.WriteLine("{\"ok\":false,\"error\":\"Invalid car number\"}");
                     return;
                 }
-                int camGroup = ParseCameraGroup(args[2]);
-                // CamSwitchNum: var1=carIdx+1 (1-based), var2=camGroupNum, var3=0
-                SendBroadcast(BroadcastCamSwitchNum, carIdx + 1, camGroup, 0);
-                Console.WriteLine("{\"ok\":true,\"action\":\"camera\",\"carIdx\":" + carIdx +
-                    ",\"camGroup\":" + camGroup + "}");
+                SendBroadcast(BroadcastCamSwitchNum, padded, camGroup, 0);
+                Console.WriteLine("{\"ok\":true,\"action\":\"camera\",\"carNumber\":\"" + target.TrimStart('#') + "\",\"camGroup\":" + camGroup + "}");
                 break;
             }
 
