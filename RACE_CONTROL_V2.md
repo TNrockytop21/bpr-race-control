@@ -147,7 +147,7 @@ Server → viewers: `event` types `under_investigation`, `penalty_issued`,
 
 ## Local dev without iRacing
 ```
-PORT=8091 node apps/server/src/main.js
+PORT=8091 ALLOW_LEGACY_HELLO=1 node apps/server/src/main.js   # legacy no-password hello is OFF in production
 node apps/server/tools/field-sim.js --url ws://localhost:8091/ws/steward --speed 4
 cd apps/steward && npm run dev        # log in (or the legacy hello path), pick ⚑ Race Control
 ```

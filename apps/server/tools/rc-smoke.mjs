@@ -1,4 +1,4 @@
-// Smoke test for Race Control v2: run the server on PORT (default 8091) and the field simulator at --speed 8, then `node apps/server/tools/rc-smoke.mjs`.
+// Smoke test for Race Control v2: run the server with ALLOW_LEGACY_HELLO=1 on PORT (default 8091) and the field simulator at --speed 8, then `node apps/server/tools/rc-smoke.mjs`.
 import WebSocket from 'ws';
 const PORT = process.env.PORT || 8091;
 const log = (...a) => console.log('[test]', ...a);

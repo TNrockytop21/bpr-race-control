@@ -444,8 +444,15 @@ export function handleStewardConnection(ws, req) {
         return;
       }
 
-      // Legacy support: if client sends steward:hello instead of auth:token,
-      // allow it (for backward compatibility during transition)
+      // Legacy no-password hello. Now that a steward socket can claim
+      // incidents, publish penalties to the broadcast and relay admin
+      // commands into a steward's sim, this is only allowed when the server
+      // is started with ALLOW_LEGACY_HELLO=1 (local dev + the field simulator).
+      if (type === MSG.STEWARD_HELLO && !/^(1|true|yes)$/i.test(String(process.env.ALLOW_LEGACY_HELLO || ''))) {
+        ws.send(JSON.stringify({ type: 'auth:failed', payload: { error: 'Login required (legacy hello disabled)' } }));
+        ws.close();
+        return;
+      }
       if (type === MSG.STEWARD_HELLO) {
         authenticated = true;
         const name = payload.name || `Steward ${stewardCounter}`;
