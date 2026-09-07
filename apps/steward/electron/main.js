@@ -9,7 +9,9 @@ const isDev = !app.isPackaged;
 const DEV_URL = process.env.VITE_DEV_URL || 'http://localhost:5179';
 
 // Path to the iRacing SDK bridge executable
-const BRIDGE_PATH = path.join(__dirname, 'irsdk-bridge.exe');
+// Packaged builds keep electron/ outside the asar (asarUnpack) because
+// child_process.spawn cannot launch an .exe from inside an archive.
+const BRIDGE_PATH = path.join(__dirname, 'irsdk-bridge.exe').replace('app.asar', 'app.asar.unpacked');
 
 function createWindow() {
   mainWindow = new BrowserWindow({

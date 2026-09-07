@@ -50,6 +50,9 @@
       "icon": null,
       "identity": null
     },
-    "forceCodeSigning": false
+    "forceCodeSigning": false,
+    "asarUnpack": [
+      "electron/**"
+    ]
   }
 }
