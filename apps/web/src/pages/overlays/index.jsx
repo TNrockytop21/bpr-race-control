@@ -137,5 +137,11 @@ export function LiveTraceOverlay() {
 export function RaceControlCallsOverlay() {
   const { maxDrivers } = useOutletContext();
   const params = new URLSearchParams(window.location.search);
-  return <RaceControlOverlay max={Number(params.get('max') || 3)} hold={Number(params.get('hold') || 12)} />;
+  const bg = params.get('bg');
+  return (
+    <>
+      {bg && <img src={bg} alt="" style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', objectFit: 'cover', zIndex: -1 }} />}
+      <RaceControlOverlay max={Number(params.get('max') || 3)} hold={Number(params.get('hold') || 12)} demo={params.get('demo') === '1'} still={params.get('still') === '1'} pos={params.get('pos') || 'bl'} scale={Number(params.get('scale') || 1)} />
+    </>
+  );
 }
