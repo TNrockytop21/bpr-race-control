@@ -71,7 +71,7 @@ function getStewardByEmail(email) {
  * Get steward by ID.
  */
 function getStewardById(id) {
-  return db.prepare('SELECT id, email, name, role, createdAt, active FROM stewards WHERE id = ?')
+  return db.prepare('SELECT username, id, email, name, role, createdAt, active FROM stewards WHERE id = ?')
     .get(id) || null;
 }
 
