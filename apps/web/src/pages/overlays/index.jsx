@@ -141,7 +141,7 @@ export function RaceControlCallsOverlay() {
   return (
     <>
       {bg && <img src={bg} alt="" style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', objectFit: 'cover', zIndex: -1 }} />}
-      <RaceControlOverlay max={Number(params.get('max') || 3)} hold={Number(params.get('hold') || 12)} demo={params.get('demo') === '1'} still={params.get('still') === '1'} pos={params.get('pos') || 'bl'} scale={Number(params.get('scale') || 1)} />
+      <RaceControlOverlay max={Number(params.get('max') || 2)} hold={Number(params.get('hold') || 12)} demo={params.get('demo') === '1'} still={params.get('still') === '1'} pos={params.get('pos') || 'tc'} scale={Number(params.get('scale') || 1)} />
     </>
   );
 }

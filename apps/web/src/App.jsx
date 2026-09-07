@@ -8,6 +8,8 @@ import { router } from './routes';
 
 export default function App() {
   useEffect(() => {
+    // ?still=1 = static preview/screenshot mode (overlay demo) — no live socket
+    if (new URLSearchParams(window.location.search).get('still') === '1') return undefined;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/viewer`;
     wsClient.connect(wsUrl);

@@ -8,7 +8,8 @@
  *   /overlay/racecontrol?max=2      at most 2 cards on screen
  *   /overlay/racecontrol?hold=15    seconds a card stays (default 12, penalties 18)
  *   /overlay/racecontrol?demo=1     plays sample calls on a loop — use it to place and size the source in OBS
- *   /overlay/racecontrol?pos=br     corner: bl (default) | br | tl | tr — cards grow away from the corner
+ *   /overlay/racecontrol?pos=tc     placement: tc top-centre (default, F1-style single-line banner, replaces
+ *                                   the old race-control text banner) | bc | bl | br | tl | tr
  *   /overlay/racecontrol?scale=0.8  shrink or enlarge the cards
  */
 import { useEffect, useState } from 'react';
@@ -48,6 +49,12 @@ const S = {
   what: { color: '#e5e7eb', fontWeight: 600, fontSize: 18, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 2 },
   why: { color: '#9ca3af', fontWeight: 500, fontSize: 15, textTransform: 'uppercase', letterSpacing: '0.5px' },
   slashes: { width: 14, background: 'repeating-linear-gradient(135deg, #e5404e 0 6px, transparent 6px 12px)' },
+  // centre placements: one line, F1 race-control style
+  bannerBody: { padding: '0 22px 0 18px', display: 'flex', alignItems: 'baseline', gap: 14, transform: 'skewX(8deg)', whiteSpace: 'nowrap' },
+  bannerWho: { color: '#fff', fontWeight: 800, fontSize: 26, textTransform: 'uppercase', letterSpacing: '0.5px' },
+  bannerWhat: { color: '#e5e7eb', fontWeight: 600, fontSize: 22, textTransform: 'uppercase', letterSpacing: '0.5px' },
+  bannerWhy: { color: '#9ca3af', fontWeight: 500, fontSize: 18, textTransform: 'uppercase', letterSpacing: '0.5px' },
+  sep: { color: '#e5404e', fontWeight: 800, fontSize: 22 },
 };
 
 // Sample calls for ?demo=1 (positioning the source in OBS, previews)
@@ -62,13 +69,15 @@ const DEMO = [
 ];
 
 const POS = {
+  tc: { left: '50%', top: 22, marginLeft: 0, alignItems: 'center', flexDirection: 'column', translate: '-50% 0' },
+  bc: { left: '50%', bottom: 48, alignItems: 'center', flexDirection: 'column', translate: '-50% 0' },
   bl: { left: 40, bottom: 48, alignItems: 'flex-start', flexDirection: 'column' },
   br: { right: 40, bottom: 48, alignItems: 'flex-end', flexDirection: 'column' },
   tl: { left: 40, top: 40, alignItems: 'flex-start', flexDirection: 'column-reverse' },
   tr: { right: 40, top: 40, alignItems: 'flex-end', flexDirection: 'column-reverse' },
 };
 
-export function RaceControlOverlay({ max = 3, hold = 12, demo = false, still = false, pos = 'bl', scale = 1 }) {
+export function RaceControlOverlay({ max = 2, hold = 12, demo = false, still = false, pos = 'tc', scale = 1 }) {
   const [cards, setCards] = useState([]);
   useEffect(() => {
     if (!demo) return undefined;
@@ -97,20 +106,29 @@ export function RaceControlOverlay({ max = 3, hold = 12, demo = false, still = f
   }, [max, hold]);
   return (
     <>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&display=swap'); @keyframes rcIn { from { opacity: 0; transform: skewX(-8deg) translateX(-30px); } to { opacity: 1; transform: skewX(-8deg) translateX(0); } }`}</style>
-      <div style={{ ...S.stack, ...(POS[pos] || POS.bl), transform: scale !== 1 ? `scale(${scale})` : undefined, transformOrigin: pos.includes('r') ? (pos.includes('t') ? 'top right' : 'bottom right') : (pos.includes('t') ? 'top left' : 'bottom left') }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&display=swap'); @keyframes rcIn { from { opacity: 0; transform: skewX(-8deg) translateY(-18px); } to { opacity: 1; transform: skewX(-8deg) translateY(0); } }`}</style>
+      <div style={{ ...S.stack, ...(POS[pos] || POS.tc), transform: scale !== 1 ? `scale(${scale})` : undefined, transformOrigin: pos.includes('c') ? (pos.includes('t') ? 'top center' : 'bottom center') : pos.includes('r') ? (pos.includes('t') ? 'top right' : 'bottom right') : (pos.includes('t') ? 'top left' : 'bottom left') }}>
         {cards.map((ev) => {
           const k = KINDS[ev.type];
           const [who, what, why] = lines(ev);
+          const centre = pos === 'tc' || pos === 'bc';
           return (
-            <div key={ev._id} style={{ ...S.card, animation: still ? 'none' : S.card.animation }}>
+            <div key={ev._id} style={{ ...S.card, minWidth: centre ? 0 : S.card.minWidth, animation: still ? 'none' : S.card.animation }}>
               <div style={S.slashes} />
               <div style={S.tag(k)}>{k.tag}</div>
-              <div style={S.body}>
-                <div style={S.who}>{who}</div>
-                {what && <div style={S.what}>{what}</div>}
-                {why && <div style={S.why}>{why}</div>}
-              </div>
+              {centre ? (
+                <div style={S.bannerBody}>
+                  <span style={S.bannerWho}>{who}</span>
+                  {what && <><span style={S.sep}>·</span><span style={S.bannerWhat}>{what}</span></>}
+                  {why && <><span style={S.sep}>·</span><span style={S.bannerWhy}>{why}</span></>}
+                </div>
+              ) : (
+                <div style={S.body}>
+                  <div style={S.who}>{who}</div>
+                  {what && <div style={S.what}>{what}</div>}
+                  {why && <div style={S.why}>{why}</div>}
+                </div>
+              )}
             </div>
           );
         })}
