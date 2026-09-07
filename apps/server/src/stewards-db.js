@@ -99,6 +99,17 @@ function verifySteward(login, password) {
 /**
  * List all stewards.
  */
+/**
+ * Set a new password for a steward, looked up by username (or email).
+ * @returns {boolean} true when a row was updated
+ */
+function setPassword(login, password) {
+  const passwordHash = bcrypt.hashSync(password, SALT_ROUNDS);
+  const key = String(login || '').toLowerCase().trim();
+  const res = db.prepare('UPDATE stewards SET passwordHash = ? WHERE username = ? OR email = ?').run(passwordHash, key, key);
+  return res.changes > 0;
+}
+
 function listStewards() {
   return db.prepare('SELECT id, email, name, role, createdAt, active FROM stewards ORDER BY createdAt')
     .all();
@@ -132,6 +143,7 @@ function updateRole(email, role) {
 }
 
 export {
+  setPassword,
   createSteward,
   getStewardByEmail,
   getStewardByUsername,
