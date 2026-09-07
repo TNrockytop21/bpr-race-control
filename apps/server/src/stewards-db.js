@@ -111,8 +111,8 @@ function setPassword(login, password) {
 }
 
 function listStewards() {
-  return db.prepare('SELECT id, email, name, role, createdAt, active FROM stewards ORDER BY createdAt')
-    .all();
+  return db.prepare('SELECT id, username, email, name, role, createdAt, active FROM stewards ORDER BY createdAt').all()
+    .map((r) => ({ ...r, active: !!r.active }));
 }
 
 /**
